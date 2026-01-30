@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, Fragment } from 'react'
+import { useState, useMemo, Fragment, useEffect, useRef } from 'react'
 import type { TeamMemberData, TeamStats, CcusageData } from './types'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import * as XLSX from 'xlsx'
@@ -12,6 +12,156 @@ export default function Home() {
   const [mergedData, setMergedData] = useState<CcusageData | null>(null)
   const [message, setMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null)
   const [copied, setCopied] = useState(false)
+  const [userName, setUserName] = useState('')
+  const [directoryHandle, setDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null)
+  const [selectedFolder, setSelectedFolder] = useState('')
+  const [customSince, setCustomSince] = useState('')
+  const [customUntil, setCustomUntil] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const statsRef = useRef<HTMLDivElement>(null)
+
+  // IndexedDB에서 폴더 핸들 저장/불러오기
+  const saveDirectoryHandle = async (handle: FileSystemDirectoryHandle) => {
+    try {
+      const db = await openDB()
+      const tx = db.transaction('handles', 'readwrite')
+      const store = tx.objectStore('handles')
+      store.put(handle, 'directoryHandle')
+    } catch (error) {
+      console.log('폴더 핸들 저장 실패:', error)
+    }
+  }
+
+  const loadDirectoryHandle = async () => {
+    try {
+      const db = await openDB()
+      const tx = db.transaction('handles', 'readonly')
+      const store = tx.objectStore('handles')
+      const request = store.get('directoryHandle')
+
+      request.onsuccess = async () => {
+        const handle = request.result as FileSystemDirectoryHandle
+        if (handle) {
+          // @ts-ignore - File System Access API
+          const permission = await handle.queryPermission({ mode: 'read' })
+          if (permission === 'granted') {
+            setDirectoryHandle(handle)
+            setSelectedFolder(handle.name)
+            return
+          }
+          // @ts-ignore - File System Access API
+          const requestPermission = await handle.requestPermission({ mode: 'read' })
+          if (requestPermission === 'granted') {
+            setDirectoryHandle(handle)
+            setSelectedFolder(handle.name)
+          }
+        }
+      }
+    } catch (error) {
+      console.log('폴더 핸들 복원 실패:', error)
+    }
+  }
+
+  const openDB = () => {
+    return new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('FileSystemDB', 1)
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result)
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result
+        if (!db.objectStoreNames.contains('handles')) {
+          db.createObjectStore('handles')
+        }
+      }
+    })
+  }
+
+  // localStorage에서 사용자 이름 불러오기
+  useEffect(() => {
+    const savedName = localStorage.getItem('claudeUserName')
+    if (savedName) {
+      setUserName(savedName)
+    }
+
+    // IndexedDB에서 폴더 핸들 불러오기
+    loadDirectoryHandle()
+  }, [])
+
+  // 사용자 이름 변경시 localStorage에 저장
+  const handleUserNameChange = (name: string) => {
+    setUserName(name)
+    localStorage.setItem('claudeUserName', name)
+  }
+
+  // 폴더 선택
+  const selectFolder = async () => {
+    try {
+      // @ts-ignore - File System Access API
+      const handle = await window.showDirectoryPicker()
+      setDirectoryHandle(handle)
+      setSelectedFolder(handle.name)
+
+      // IndexedDB에 핸들 저장
+      await saveDirectoryHandle(handle)
+
+      setMessage({ text: `폴더 "${handle.name}" 선택 완료!`, type: 'success' })
+      setTimeout(() => setMessage(null), 3000)
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') {
+        setMessage({ text: '폴더 선택 실패. Chrome/Edge 브라우저를 사용해주세요.', type: 'error' })
+        setTimeout(() => setMessage(null), 3000)
+      }
+    }
+  }
+
+  // 선택된 폴더에서 파일 자동 불러오기
+  const loadFileFromFolder = async () => {
+    if (!directoryHandle) {
+      setMessage({ text: '먼저 폴더를 선택해주세요.', type: 'error' })
+      setTimeout(() => setMessage(null), 3000)
+      return
+    }
+
+    if (!userName) {
+      setMessage({ text: '먼저 이름을 입력해주세요.', type: 'error' })
+      setTimeout(() => setMessage(null), 3000)
+      return
+    }
+
+    setIsLoading(true)
+    setMessage({ text: '파일을 불러오는 중...', type: 'success' })
+
+    try {
+      const fileName = `${userName}.json`
+      const fileHandle = await directoryHandle.getFileHandle(fileName)
+      const file = await fileHandle.getFile()
+
+      // 기존 파일 처리 로직 재사용
+      const isDuplicate = files.some(f => f.name === file.name)
+      if (isDuplicate) {
+        setMessage({ text: '이미 추가된 파일입니다.', type: 'error' })
+        setTimeout(() => setMessage(null), 3000)
+        setIsLoading(false)
+        return
+      }
+
+      setFiles(prev => [...prev, file])
+      await processFiles([...files, file])
+
+      setMessage({ text: `✅ "${fileName}" 파일을 성공적으로 불러왔습니다!`, type: 'success' })
+      setTimeout(() => setMessage(null), 3000)
+
+      // 결과로 부드럽게 스크롤
+      setTimeout(() => {
+        statsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 300)
+    } catch (error) {
+      setMessage({ text: `"${userName}.json" 파일을 찾을 수 없습니다. 먼저 터미널에서 명령어를 실행해주세요.`, type: 'error' })
+      setTimeout(() => setMessage(null), 5000)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   // 이번 주 월요일~일요일 계산
   const weekDates = useMemo(() => {
@@ -39,7 +189,22 @@ export default function Home() {
     }
   }, [])
 
-  const command = `npx ccusage daily --json --since ${weekDates.since} --until ${weekDates.until} > result.json`
+  // 날짜 형식 변환 함수 (YYYY-MM-DD → YYYYMMDD)
+  const formatDateForCommand = (dateStr: string) => {
+    return dateStr.replace(/-/g, '')
+  }
+
+  // 날짜 형식 변환 함수 (YYYYMMDD → YYYY-MM-DD)
+  const formatDateForInput = (dateStr: string) => {
+    if (dateStr.length !== 8) return ''
+    return `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
+  }
+
+  // 명령어에 사용할 날짜 계산
+  const since = customSince ? formatDateForCommand(customSince) : weekDates.since
+  const until = customUntil ? formatDateForCommand(customUntil) : weekDates.until
+
+  const command = `npx ccusage daily --json --since ${since} --until ${until} > ${userName || '이름'}.json`
 
   const copyCommand = async () => {
     try {
@@ -409,9 +574,15 @@ export default function Home() {
 
   return (
     <main>
+      {message && (
+        <div className={`global-snackbar ${message.type}`}>
+          {message.text}
+        </div>
+      )}
+
       <div className="container">
         <header className="header">
-          <h1>🚀 Claude Max 팀 사용량 대시보드 ({weekDates.display})</h1>
+          <h1>🚀 Claude Max 팀 사용량 대시보드</h1>
           <p>팀원들의 Claude Max 사용량을 한눈에 확인하세요</p>
         </header>
 
@@ -420,6 +591,39 @@ export default function Home() {
             <h2>📋 이번 주 데이터 수집 명령어</h2>
             <p className="command-period">사전 준비: <code>npm install -g ccusage</code></p>
           </div>
+          <div className="input-row">
+            <div className="name-input-container">
+              <label htmlFor="userName">👤 이름 입력</label>
+              <input
+                id="userName"
+                type="text"
+                value={userName}
+                onChange={(e) => handleUserNameChange(e.target.value)}
+                placeholder="이름을 넣으면 localStorage에 저장됩니다."
+                className="name-input"
+              />
+            </div>
+            <div className="date-input-container">
+              <label htmlFor="dateSince">📅 날짜 범위 (선택)</label>
+              <div className="date-inputs">
+                <input
+                  id="dateSince"
+                  type="date"
+                  value={customSince || formatDateForInput(weekDates.since)}
+                  onChange={(e) => setCustomSince(e.target.value)}
+                  className="date-input"
+                />
+                <span className="date-separator">~</span>
+                <input
+                  id="dateUntil"
+                  type="date"
+                  value={customUntil || formatDateForInput(weekDates.until)}
+                  onChange={(e) => setCustomUntil(e.target.value)}
+                  className="date-input"
+                />
+              </div>
+            </div>
+          </div>
           <div className="command-box" onClick={copyCommand}>
             <code>{command}</code>
             <button className="copy-button">
@@ -427,9 +631,29 @@ export default function Home() {
             </button>
           </div>
           <div className="command-instructions">
-            <p>1️⃣ 위 명령어를 클릭하여 복사</p>
+            <p>1️⃣ 이름 입력 후 위 명령어 클릭하여 복사</p>
             <p>2️⃣ 터미널에 붙여넣기 후 실행</p>
             <p>3️⃣ 생성된 JSON 파일을 아래에 업로드</p>
+          </div>
+        </div>
+
+        <div className="auto-load-section">
+          <div className="auto-load-header">
+            <h2>🚀 빠른 파일 불러오기</h2>
+            <p>폴더를 선택하면 자동으로 파일을 찾아옵니다</p>
+          </div>
+          <div className="auto-load-buttons">
+            <button className="folder-select-button" onClick={selectFolder}>
+              📂 폴더 선택
+              {selectedFolder && <span className="folder-name"> ({selectedFolder})</span>}
+            </button>
+            <button
+              className="auto-load-button"
+              onClick={loadFileFromFolder}
+              disabled={!directoryHandle || !userName || isLoading}
+            >
+              {isLoading ? '⏳ 불러오는 중...' : `⚡ ${userName || '이름'}.json 자동 불러오기`}
+            </button>
           </div>
         </div>
 
@@ -467,17 +691,11 @@ export default function Home() {
               ))}
             </div>
           )}
-
-          {message && (
-            <div className={`message ${message.type}`}>
-              {message.text}
-            </div>
-          )}
         </div>
 
         {stats && (
           <>
-            <div className="stats-grid">
+            <div className="stats-grid" ref={statsRef}>
               <div className="stat-card">
                 <div className="stat-label">파일 개수</div>
                 <div className="stat-value">{stats.totalMembers}</div>
