@@ -146,6 +146,8 @@ main {
   color: white;
   font-size: 1rem;
   transition: all 0.3s;
+  height: 3rem;
+  box-sizing: border-box;
 }
 
 .name-input::placeholder {
@@ -187,6 +189,8 @@ main {
   color: white;
   font-size: 1rem;
   transition: all 0.3s;
+  height: 3rem;
+  box-sizing: border-box;
 }
 
 .date-input:focus {
@@ -300,6 +304,57 @@ main {
     gap: 0.5rem;
     text-align: center;
   }
+}
+
+/* 슬랙 설정 섹션 */
+.slack-settings-section {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 2px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  margin-bottom: 2rem;
+}
+
+.slack-settings-section .command-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.slack-settings-section .command-header h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.slack-settings-section .command-header p {
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+.slack-settings-section .name-input-container label {
+  color: #374151;
+}
+
+.slack-settings-section .name-input {
+  background: white;
+  border: 2px solid #d1d5db;
+  color: #1a1a1a;
+}
+
+.slack-settings-section .name-input::placeholder {
+  color: #9ca3af;
+}
+
+.slack-settings-section .name-input:focus {
+  background: white;
+  border-color: #3b82f6;
+}
+
+.slack-settings-section .command-instructions p {
+  color: #6b7280;
+  opacity: 1;
 }
 
 /* 자동 불러오기 섹션 */

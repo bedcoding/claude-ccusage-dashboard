@@ -18,6 +18,9 @@ export default function Home() {
   const [customSince, setCustomSince] = useState('')
   const [customUntil, setCustomUntil] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [slackBotToken, setSlackBotToken] = useState('')
+  const [slackChannelId, setSlackChannelId] = useState('')
+  const [isSendingToSlack, setIsSendingToSlack] = useState(false)
   const statsRef = useRef<HTMLDivElement>(null)
 
   // IndexedDB에서 폴더 핸들 저장/불러오기
@@ -76,11 +79,21 @@ export default function Home() {
     })
   }
 
-  // localStorage에서 사용자 이름 불러오기
+  // localStorage에서 사용자 이름 및 슬랙 설정 불러오기
   useEffect(() => {
     const savedName = localStorage.getItem('claudeUserName')
     if (savedName) {
       setUserName(savedName)
+    }
+
+    const savedSlackToken = localStorage.getItem('slackBotToken')
+    if (savedSlackToken) {
+      setSlackBotToken(savedSlackToken)
+    }
+
+    const savedSlackChannel = localStorage.getItem('slackChannelId')
+    if (savedSlackChannel) {
+      setSlackChannelId(savedSlackChannel)
     }
 
     // IndexedDB에서 폴더 핸들 불러오기
@@ -91,6 +104,17 @@ export default function Home() {
   const handleUserNameChange = (name: string) => {
     setUserName(name)
     localStorage.setItem('claudeUserName', name)
+  }
+
+  // 슬랙 설정 변경시 localStorage에 저장
+  const handleSlackTokenChange = (token: string) => {
+    setSlackBotToken(token)
+    localStorage.setItem('slackBotToken', token)
+  }
+
+  const handleSlackChannelChange = (channel: string) => {
+    setSlackChannelId(channel)
+    localStorage.setItem('slackChannelId', channel)
   }
 
   // 폴더 선택
@@ -449,6 +473,119 @@ export default function Home() {
     setMergedData(merged)
   }
 
+  const testSlackMessage = async () => {
+    if (!slackBotToken || !slackChannelId) {
+      setMessage({ text: '슬랙 Bot Token과 채널 ID를 먼저 입력해주세요.', type: 'error' })
+      setTimeout(() => setMessage(null), 3000)
+      return
+    }
+
+    setIsSendingToSlack(true)
+    setMessage({ text: '테스트 메시지 전송 중...', type: 'success' })
+
+    try {
+      const testText = `🧪 슬랙 연동 테스트 메시지\n\n현재 시간: ${new Date().toLocaleString('ko-KR')}\n\n✅ chat:write 권한이 정상적으로 작동합니다!`
+
+      const response = await fetch('/api/slack/message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          slackToken: slackBotToken,
+          channelId: slackChannelId,
+          text: testText
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.ok) {
+        setMessage({ text: '✅ 테스트 메시지 전송 완료!', type: 'success' })
+      } else {
+        setMessage({ text: `테스트 실패: ${result.error}`, type: 'error' })
+      }
+    } catch (error) {
+      setMessage({ text: `테스트 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`, type: 'error' })
+    } finally {
+      setIsSendingToSlack(false)
+      setTimeout(() => setMessage(null), 5000)
+    }
+  }
+
+  const sendLinkToSlack = async () => {
+    if (!teamData.length) return
+
+    if (!slackBotToken || !slackChannelId) {
+      setMessage({ text: '슬랙 Bot Token과 채널 ID를 먼저 입력해주세요.', type: 'error' })
+      setTimeout(() => setMessage(null), 3000)
+      return
+    }
+
+    setIsSendingToSlack(true)
+    setMessage({ text: '다운로드 링크 생성 중...', type: 'success' })
+
+    try {
+      // API Route를 통한 Slack 링크 전송
+      const response = await fetch('/api/slack/send-link', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          slackToken: slackBotToken,
+          channelId: slackChannelId,
+          stats,
+          mergedData,
+          teamData,
+          customSince,
+          customUntil,
+          weekDates
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.ok) {
+        // 클립보드에 URL 복사
+        try {
+          await navigator.clipboard.writeText(result.downloadUrl)
+
+          if (result.slackSent) {
+            setMessage({
+              text: `✅ 슬랙 전송 완료! 다운로드 링크가 클립보드에 복사되었습니다.\n📥 ${result.downloadUrl}\n⏰ 유효시간: ${result.expiresIn}`,
+              type: 'success'
+            })
+          } else {
+            setMessage({
+              text: `⚠️ 다운로드 링크가 생성되었지만 슬랙 전송은 실패했습니다.\n오류: ${result.slackError}\n\n📥 다운로드 링크 (클립보드 복사됨): ${result.downloadUrl}\n⏰ 유효시간: ${result.expiresIn}`,
+              type: 'success'
+            })
+          }
+        } catch {
+          if (result.slackSent) {
+            setMessage({
+              text: `✅ 슬랙 전송 완료!\n📥 다운로드 링크: ${result.downloadUrl}\n⏰ 유효시간: ${result.expiresIn}`,
+              type: 'success'
+            })
+          } else {
+            setMessage({
+              text: `⚠️ 다운로드 링크가 생성되었지만 슬랙 전송은 실패했습니다.\n오류: ${result.slackError}\n\n📥 다운로드 링크: ${result.downloadUrl}\n⏰ 유효시간: ${result.expiresIn}`,
+              type: 'success'
+            })
+          }
+        }
+      } else {
+        setMessage({ text: `링크 생성 실패: ${result.error}`, type: 'error' })
+      }
+    } catch (error) {
+      setMessage({ text: `슬랙 전송 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`, type: 'error' })
+    } finally {
+      setIsSendingToSlack(false)
+      setTimeout(() => setMessage(null), 5000)
+    }
+  }
+
   const exportToExcel = () => {
     if (!teamData.length) return
 
@@ -637,6 +774,60 @@ export default function Home() {
           </div>
         </div>
 
+        <div className="slack-settings-section">
+          <div className="command-header">
+            <h2>💬 슬랙 설정</h2>
+            <p>슬랙으로 리포트를 전송하려면 Bot Token과 채널 ID를 입력하세요</p>
+          </div>
+          <div className="input-row">
+            <div className="name-input-container">
+              <label htmlFor="slackToken">🔑 Slack Bot Token</label>
+              <input
+                id="slackToken"
+                type="text"
+                value={slackBotToken}
+                onChange={(e) => handleSlackTokenChange(e.target.value)}
+                placeholder="xoxb-로 시작하는 Bot Token"
+                className="name-input"
+              />
+            </div>
+            <div className="name-input-container">
+              <label htmlFor="slackChannel">📢 채널 ID</label>
+              <input
+                id="slackChannel"
+                type="text"
+                value={slackChannelId}
+                onChange={(e) => handleSlackChannelChange(e.target.value)}
+                placeholder="C로 시작하는 채널 ID (예: C1234567890)"
+                className="name-input"
+              />
+            </div>
+          </div>
+          <div className="command-instructions">
+            <p>💡 Bot Token은 팀장에게 받으세요</p>
+            <p>💡 채널 ID는 슬랙 채널 우클릭 → '채널 세부정보 보기' → 맨 아래에서 확인</p>
+          </div>
+          <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+            <button
+              onClick={testSlackMessage}
+              disabled={isSendingToSlack || !slackBotToken || !slackChannelId}
+              style={{
+                padding: '0.75rem 1.5rem',
+                background: isSendingToSlack ? '#94a3b8' : '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                cursor: (!slackBotToken || !slackChannelId || isSendingToSlack) ? 'not-allowed' : 'pointer',
+                opacity: (!slackBotToken || !slackChannelId) ? 0.5 : 1
+              }}
+            >
+              {isSendingToSlack ? '⏳ 전송 중...' : '🧪 연동 테스트'}
+            </button>
+          </div>
+        </div>
+
         <div className="auto-load-section">
           <div className="auto-load-header">
             <h2>🚀 빠른 파일 불러오기</h2>
@@ -722,9 +913,23 @@ export default function Home() {
               <div className="table-card">
                 <div className="table-header">
                   <div className="chart-title">전체 사용 내역 (통합)</div>
-                  <button className="excel-button" onClick={exportToExcel}>
-                    📊 엑셀 다운로드
-                  </button>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button className="excel-button" onClick={exportToExcel}>
+                      📊 엑셀 다운로드
+                    </button>
+                    <button
+                      className="excel-button"
+                      onClick={sendLinkToSlack}
+                      disabled={isSendingToSlack || !slackBotToken || !slackChannelId}
+                      style={{
+                        background: isSendingToSlack ? '#94a3b8' : '#3b82f6',
+                        opacity: (!slackBotToken || !slackChannelId) ? 0.5 : 1,
+                        cursor: (!slackBotToken || !slackChannelId || isSendingToSlack) ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {isSendingToSlack ? '⏳ 전송 중...' : '🔗 슬랙으로 url 전송'}
+                    </button>
+                  </div>
                 </div>
                 <div className="table-scroll">
                   <table className="detail-table">
@@ -786,9 +991,23 @@ export default function Home() {
             <div className="table-card">
               <div className="table-header">
                 <div className="chart-title">상세 사용 내역 (파일별)</div>
-                <button className="excel-button" onClick={exportToExcel}>
-                  📊 엑셀 다운로드
-                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button className="excel-button" onClick={exportToExcel}>
+                    📊 엑셀 다운로드
+                  </button>
+                  <button
+                    className="excel-button"
+                    onClick={sendLinkToSlack}
+                    disabled={isSendingToSlack || !slackBotToken || !slackChannelId}
+                    style={{
+                      background: isSendingToSlack ? '#94a3b8' : '#3b82f6',
+                      opacity: (!slackBotToken || !slackChannelId) ? 0.5 : 1,
+                      cursor: (!slackBotToken || !slackChannelId || isSendingToSlack) ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {isSendingToSlack ? '⏳ 전송 중...' : '🔗 슬랙으로 전송'}
+                  </button>
+                </div>
               </div>
               <div className="table-scroll">
                 <table className="detail-table">
