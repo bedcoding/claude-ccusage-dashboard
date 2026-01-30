@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getFile } from '@/lib/db'
+import { getFileInfo } from '@/lib/db'
 
 export async function GET(
   request: NextRequest,
@@ -8,27 +8,24 @@ export async function GET(
   try {
     const { id } = await params
 
-    // DB에서 파일 가져오기
-    const file = await getFile(id)
+    // 파일 정보 가져오기 (데이터 제외)
+    const fileInfo = await getFileInfo(id)
 
-    if (!file) {
+    if (!fileInfo) {
       return NextResponse.json(
         { error: '파일을 찾을 수 없거나 삭제되었습니다.' },
         { status: 404 }
       )
     }
 
-    // 파일 응답 (삭제하지 않음 - 여러 번 다운로드 가능)
-    return new NextResponse(new Uint8Array(file.data), {
-      headers: {
-        'Content-Type': file.mimeType,
-        'Content-Disposition': `attachment; filename="${encodeURIComponent(file.filename)}"`,
-        'Content-Length': file.data.length.toString(),
-      },
+    return NextResponse.json({
+      filename: fileInfo.filename,
+      stats: fileInfo.stats,
+      createdAt: fileInfo.createdAt,
     })
 
   } catch (error) {
-    console.error('[Download] 에러:', error)
+    console.error('[FileInfo] 에러:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '알 수 없는 오류' },
       { status: 500 }
