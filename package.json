@@ -1,0 +1,29 @@
+{
+  "name": "claude-max-team-dashboard",
+  "version": "1.0.0",
+  "description": "Claude Max 팀 사용량 대시보드",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "keywords": [
+    "claude",
+    "usage",
+    "dashboard"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@types/node": "^25.1.0",
+    "@types/react": "^19.2.10",
+    "next": "^16.1.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-is": "^19.2.4",
+    "recharts": "^3.7.0",
+    "typescript": "^5.9.3",
+    "xlsx": "^0.18.5"
+  }
+}
