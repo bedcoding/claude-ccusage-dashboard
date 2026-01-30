@@ -3,10 +3,10 @@ import { fileStore } from '@/lib/fileStore'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
 
     // 파일 가져오기
     const file = fileStore.get(id)
