@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import * as XLSX from 'xlsx'
 import { randomUUID } from 'crypto'
-import { saveFile } from '@/lib/db'
+import { saveReport } from '@/lib/db'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { slackToken, channelId, stats, mergedData, teamData, customSince, customUntil, weekDates } = body
+    const { slackToken, channelId, stats, mergedData, teamData, customSince, customUntil, weekDates, userName } = body
 
     if (!slackToken || !channelId) {
       return NextResponse.json(
@@ -15,145 +14,43 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 엑셀 파일 생성 (기존 로직 재사용)
-    const mergedSheetData: any[] = []
-    if (mergedData) {
-      mergedData.daily.forEach((day: any) => {
-        mergedSheetData.push({
-          'date': day.date,
-          'inputTokens': day.inputTokens,
-          'outputTokens': day.outputTokens,
-          'cacheCreationTokens': day.cacheCreationTokens,
-          'cacheReadTokens': day.cacheReadTokens,
-          'totalTokens': day.totalTokens,
-          'totalCost': day.totalCost.toFixed(2),
-          'modelsUsed': day.modelsUsed.join(', ')
-        })
+    // DB에 리포트 데이터 저장
+    const reportId = randomUUID()
+    const period = `${customSince || weekDates.since} ~ ${customUntil || weekDates.until}`
 
-        day.modelBreakdowns.forEach((model: any) => {
-          mergedSheetData.push({
-            'date': '',
-            'inputTokens': model.inputTokens,
-            'outputTokens': model.outputTokens,
-            'cacheCreationTokens': model.cacheCreationTokens,
-            'cacheReadTokens': model.cacheReadTokens,
-            'totalTokens': model.inputTokens + model.outputTokens + model.cacheCreationTokens + model.cacheReadTokens,
-            'totalCost': model.cost.toFixed(2),
-            'modelsUsed': `  └ ${model.modelName}`
-          })
-        })
-      })
-
-      mergedSheetData.push({
-        'date': '전체 총계',
-        'inputTokens': mergedData.totals.inputTokens,
-        'outputTokens': mergedData.totals.outputTokens,
-        'cacheCreationTokens': mergedData.totals.cacheCreationTokens,
-        'cacheReadTokens': mergedData.totals.cacheReadTokens,
-        'totalTokens': mergedData.totals.totalTokens,
-        'totalCost': mergedData.totals.totalCost.toFixed(2),
-        'modelsUsed': ''
-      })
+    // 원본 데이터
+    const rawData = {
+      mergedData,
+      teamData,
+      customSince,
+      customUntil,
+      weekDates
     }
 
-    const detailData: any[] = []
-    teamData.forEach((member: any) => {
-      member.data.daily.forEach((day: any) => {
-        detailData.push({
-          '파일명': member.name,
-          'date': day.date,
-          'inputTokens': day.inputTokens,
-          'outputTokens': day.outputTokens,
-          'cacheCreationTokens': day.cacheCreationTokens,
-          'cacheReadTokens': day.cacheReadTokens,
-          'totalTokens': day.totalTokens,
-          'totalCost': day.totalCost.toFixed(2),
-          'modelsUsed': day.modelsUsed.join(', ')
-        })
-
-        day.modelBreakdowns.forEach((model: any) => {
-          detailData.push({
-            '파일명': '',
-            'date': '',
-            'inputTokens': model.inputTokens,
-            'outputTokens': model.outputTokens,
-            'cacheCreationTokens': model.cacheCreationTokens,
-            'cacheReadTokens': model.cacheReadTokens,
-            'totalTokens': model.inputTokens + model.outputTokens + model.cacheCreationTokens + model.cacheReadTokens,
-            'totalCost': model.cost.toFixed(2),
-            'modelsUsed': `  └ ${model.modelName}`
-          })
-        })
-      })
-
-      detailData.push({
-        '파일명': `${member.name} 총계`,
-        'date': '',
-        'inputTokens': member.data.totals.inputTokens,
-        'outputTokens': member.data.totals.outputTokens,
-        'cacheCreationTokens': member.data.totals.cacheCreationTokens,
-        'cacheReadTokens': member.data.totals.cacheReadTokens,
-        'totalTokens': member.data.totals.totalTokens,
-        'totalCost': member.data.totals.totalCost.toFixed(2),
-        'modelsUsed': ''
-      })
-      detailData.push({})
-    })
-
-    const summaryData = stats?.members.map((member: any) => ({
-      '파일명': member.name,
-      'totalCost': member.cost.toFixed(2),
-      'totalTokens': member.tokens,
-      'percentage': member.percentage.toFixed(1)
-    }))
-
-    const wb = XLSX.utils.book_new()
-
-    if (mergedData) {
-      const wsMerged = XLSX.utils.json_to_sheet(mergedSheetData)
-      XLSX.utils.book_append_sheet(wb, wsMerged, '전체 통합')
+    // 요약 통계
+    const summary = {
+      totalCost: stats?.totalCost || 0,
+      totalTokens: stats?.totalTokens || 0,
+      totalMembers: stats?.totalMembers || 0,
+      members: stats?.members || []
     }
 
-    const wsDetail = XLSX.utils.json_to_sheet(detailData)
-    const wsSummary = XLSX.utils.json_to_sheet(summaryData || [])
+    await saveReport(reportId, userName || null, period, rawData, summary)
 
-    XLSX.utils.book_append_sheet(wb, wsDetail, '파일별 상세')
-    XLSX.utils.book_append_sheet(wb, wsSummary, '요약')
-
-    // Buffer로 변환
-    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' })
-    const buffer = Buffer.from(excelBuffer)
-    const filename = `Claude_Usage_${new Date().toISOString().split('T')[0]}.xlsx`
-
-    // DB에 파일 저장
-    const fileId = randomUUID()
-    console.log('[SendLink] 파일 ID 생성:', fileId)
-    console.log('[SendLink] DATABASE_URL 설정:', !!process.env.DATABASE_URL)
-
-    await saveFile(
-      fileId,
-      buffer,
-      filename,
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    )
-    console.log('[SendLink] DB 저장 완료:', fileId)
-
-    // 다운로드 링크 생성
-    const downloadUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://claude-ccusage-dashboard.vercel.app'}/api/download/${fileId}`
-    console.log('[SendLink] 다운로드 URL:', downloadUrl)
+    // 고정 URL (항상 같은 링크)
+    const reportsUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://claude-ccusage-dashboard.vercel.app'}/reports`
 
     // 통계 메시지 생성
-    const summary = `📊 *Claude Max 팀 사용량 리포트*
+    const message = `📊 *Claude Max 팀 사용량 리포트 생성 완료*
 
 💰 총 비용: *$${stats?.totalCost.toFixed(2)}*
 🎯 총 토큰: *${((stats?.totalTokens || 0) / 1000000).toFixed(1)}M*
 📁 파일 개수: *${stats?.totalMembers}개*
 📅 기간: ${customSince || weekDates.since} ~ ${customUntil || weekDates.until}
 
-📥 *엑셀 다운로드:* ${downloadUrl}
-⏰ *링크 유효시간:* 5분
+📥 *모든 리포트 보기:* ${reportsUrl}
 
-_링크는 5분 후 또는 다운로드 후 만료됩니다._`
+_최근 5개의 리포트를 확인할 수 있습니다._`
 
     // Slack 메시지 전송
     const response = await fetch('https://slack.com/api/chat.postMessage', {
@@ -164,7 +61,7 @@ _링크는 5분 후 또는 다운로드 후 만료됩니다._`
       },
       body: JSON.stringify({
         channel: channelId,
-        text: summary
+        text: message
       })
     })
 
@@ -174,17 +71,15 @@ _링크는 5분 후 또는 다운로드 후 만료됩니다._`
     if (result.ok) {
       return NextResponse.json({
         ok: true,
-        fileId,
-        downloadUrl,
-        expiresIn: '5분',
+        reportId,
+        reportsUrl,
         slackSent: true
       })
     } else {
       return NextResponse.json({
         ok: true, // URL은 성공적으로 생성됨
-        fileId,
-        downloadUrl,
-        expiresIn: '5분',
+        reportId,
+        reportsUrl,
         slackSent: false,
         slackError: result.error
       })

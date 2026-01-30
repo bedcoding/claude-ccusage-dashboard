@@ -11,7 +11,6 @@ export function getPool(): Pool {
 
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      // Vercel serverless 환경에서는 연결 수를 제한
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
@@ -21,52 +20,76 @@ export function getPool(): Pool {
   return pool
 }
 
-// 파일 저장
-export async function saveFile(
+// 리포트 저장 (최대 5개만 유지)
+export async function saveReport(
   id: string,
-  buffer: Buffer,
-  filename: string,
-  mimeType: string
+  reporterName: string | null,
+  period: string,
+  rawData: any,
+  summary: any
 ): Promise<void> {
   const pool = getPool()
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // 5분 후
 
-  // 1. 만료된 파일 삭제
-  await pool.query('DELETE FROM temp_files WHERE expires_at < NOW()')
-
-  // 2. 최대 5개 유지 - 오래된 파일부터 삭제
+  // 1. 최대 5개 유지 - 오래된 리포트부터 삭제
   await pool.query(
-    `DELETE FROM temp_files
+    `DELETE FROM reports
      WHERE id IN (
-       SELECT id FROM temp_files
+       SELECT id FROM reports
        ORDER BY created_at DESC
        OFFSET 4
      )`
   )
 
-  // 3. 새 파일 저장
+  // 2. 새 리포트 저장
   await pool.query(
-    `INSERT INTO temp_files (id, filename, mime_type, data, expires_at, created_at)
+    `INSERT INTO reports (id, reporter_name, period, raw_data, summary, created_at)
      VALUES ($1, $2, $3, $4, $5, NOW())
      ON CONFLICT (id) DO UPDATE
-     SET filename = $2, mime_type = $3, data = $4, expires_at = $5`,
-    [id, filename, mimeType, buffer, expiresAt]
+     SET reporter_name = $2, period = $3, raw_data = $4, summary = $5`,
+    [id, reporterName, period, JSON.stringify(rawData), JSON.stringify(summary)]
   )
 }
 
-// 파일 가져오기
-export async function getFile(id: string): Promise<{
-  filename: string
-  mimeType: string
-  data: Buffer
+// 모든 리포트 목록 조회 (최신순)
+export async function getReports(): Promise<Array<{
+  id: string
+  reporterName: string | null
+  period: string
+  summary: any
+  createdAt: Date
+}>> {
+  const pool = getPool()
+
+  const result = await pool.query(
+    `SELECT id, reporter_name, period, summary, created_at
+     FROM reports
+     ORDER BY created_at DESC
+     LIMIT 5`
+  )
+
+  return result.rows.map(row => ({
+    id: row.id,
+    reporterName: row.reporter_name,
+    period: row.period,
+    summary: row.summary,
+    createdAt: row.created_at,
+  }))
+}
+
+// 특정 리포트 조회 (원본 데이터 포함)
+export async function getReport(id: string): Promise<{
+  id: string
+  period: string
+  rawData: any
+  summary: any
+  createdAt: Date
 } | null> {
   const pool = getPool()
 
-  // 만료된 파일은 제외
   const result = await pool.query(
-    `SELECT filename, mime_type, data
-     FROM temp_files
-     WHERE id = $1 AND expires_at > NOW()`,
+    `SELECT id, period, raw_data, summary, created_at
+     FROM reports
+     WHERE id = $1`,
     [id]
   )
 
@@ -76,23 +99,37 @@ export async function getFile(id: string): Promise<{
 
   const row = result.rows[0]
   return {
-    filename: row.filename,
-    mimeType: row.mime_type,
-    data: row.data,
+    id: row.id,
+    period: row.period,
+    rawData: row.raw_data,
+    summary: row.summary,
+    createdAt: row.created_at,
   }
 }
 
-// 파일 삭제
-export async function deleteFile(id: string): Promise<void> {
+// 여러 리포트 조회 (원본 데이터 포함)
+export async function getReportsByIds(ids: string[]): Promise<Array<{
+  id: string
+  period: string
+  rawData: any
+  summary: any
+  createdAt: Date
+}>> {
   const pool = getPool()
-  await pool.query('DELETE FROM temp_files WHERE id = $1', [id])
-}
 
-// 만료된 파일 정리 (주기적으로 호출하거나 다운로드 시 호출)
-export async function cleanupExpiredFiles(): Promise<number> {
-  const pool = getPool()
   const result = await pool.query(
-    'DELETE FROM temp_files WHERE expires_at < NOW() RETURNING id'
+    `SELECT id, period, raw_data, summary, created_at
+     FROM reports
+     WHERE id = ANY($1)
+     ORDER BY created_at DESC`,
+    [ids]
   )
-  return result.rowCount || 0
+
+  return result.rows.map(row => ({
+    id: row.id,
+    period: row.period,
+    rawData: row.raw_data,
+    summary: row.summary,
+    createdAt: row.created_at,
+  }))
 }

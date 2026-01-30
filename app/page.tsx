@@ -540,7 +540,8 @@ export default function Home() {
           teamData,
           customSince,
           customUntil,
-          weekDates
+          weekDates,
+          userName
         })
       })
 
@@ -549,28 +550,28 @@ export default function Home() {
       if (result.ok) {
         // 클립보드에 URL 복사
         try {
-          await navigator.clipboard.writeText(result.downloadUrl)
+          await navigator.clipboard.writeText(result.reportsUrl)
 
           if (result.slackSent) {
             setMessage({
-              text: `✅ 슬랙 전송 완료! 다운로드 링크가 클립보드에 복사되었습니다.\n📥 ${result.downloadUrl}\n⏰ 유효시간: ${result.expiresIn}`,
+              text: `✅ 슬랙 전송 완료! 리포트 페이지 링크가 클립보드에 복사되었습니다.\n📥 ${result.reportsUrl}`,
               type: 'success'
             })
           } else {
             setMessage({
-              text: `⚠️ 다운로드 링크가 생성되었지만 슬랙 전송은 실패했습니다.\n오류: ${result.slackError}\n\n📥 다운로드 링크 (클립보드 복사됨): ${result.downloadUrl}\n⏰ 유효시간: ${result.expiresIn}`,
+              text: `⚠️ 리포트가 생성되었지만 슬랙 전송은 실패했습니다.\n오류: ${result.slackError}\n\n📥 리포트 링크 (클립보드 복사됨): ${result.reportsUrl}`,
               type: 'success'
             })
           }
         } catch {
           if (result.slackSent) {
             setMessage({
-              text: `✅ 슬랙 전송 완료!\n📥 다운로드 링크: ${result.downloadUrl}\n⏰ 유효시간: ${result.expiresIn}`,
+              text: `✅ 슬랙 전송 완료!\n📥 리포트 링크: ${result.reportsUrl}`,
               type: 'success'
             })
           } else {
             setMessage({
-              text: `⚠️ 다운로드 링크가 생성되었지만 슬랙 전송은 실패했습니다.\n오류: ${result.slackError}\n\n📥 다운로드 링크: ${result.downloadUrl}\n⏰ 유효시간: ${result.expiresIn}`,
+              text: `⚠️ 리포트가 생성되었지만 슬랙 전송은 실패했습니다.\n오류: ${result.slackError}\n\n📥 리포트 링크: ${result.reportsUrl}`,
               type: 'success'
             })
           }
