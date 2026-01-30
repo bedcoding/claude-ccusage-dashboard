@@ -411,14 +411,14 @@ export default function Home() {
     <main>
       <div className="container">
         <header className="header">
-          <h1>🚀 Claude Max 팀 사용량 대시보드</h1>
+          <h1>🚀 Claude Max 팀 사용량 대시보드 ({weekDates.display})</h1>
           <p>팀원들의 Claude Max 사용량을 한눈에 확인하세요</p>
         </header>
 
         <div className="command-section">
           <div className="command-header">
             <h2>📋 이번 주 데이터 수집 명령어</h2>
-            <p className="command-period">{weekDates.display}</p>
+            <p className="command-period">사전 준비: <code>npm install -g ccusage</code></p>
           </div>
           <div className="command-box" onClick={copyCommand}>
             <code>{command}</code>
