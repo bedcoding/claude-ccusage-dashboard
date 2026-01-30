@@ -127,15 +127,20 @@ export async function POST(request: NextRequest) {
 
     // DB에 파일 저장
     const fileId = randomUUID()
+    console.log('[SendLink] 파일 ID 생성:', fileId)
+    console.log('[SendLink] DATABASE_URL 설정:', !!process.env.DATABASE_URL)
+
     await saveFile(
       fileId,
       buffer,
       filename,
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
+    console.log('[SendLink] DB 저장 완료:', fileId)
 
     // 다운로드 링크 생성
     const downloadUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://claude-ccusage-dashboard.vercel.app'}/api/download/${fileId}`
+    console.log('[SendLink] 다운로드 URL:', downloadUrl)
 
     // 통계 메시지 생성
     const summary = `📊 *Claude Max 팀 사용량 리포트*
