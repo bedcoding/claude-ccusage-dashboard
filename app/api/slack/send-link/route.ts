@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
-import { fileStore } from '@/lib/fileStore'
 import { randomUUID } from 'crypto'
+import { saveFile } from '@/lib/db'
 
 export async function POST(request: NextRequest) {
   try {
@@ -123,18 +123,16 @@ export async function POST(request: NextRequest) {
     // Buffer로 변환
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' })
     const buffer = Buffer.from(excelBuffer)
-
-    // 고유 ID 생성
-    const fileId = randomUUID()
     const filename = `Claude_Usage_${new Date().toISOString().split('T')[0]}.xlsx`
 
-    // 파일을 메모리에 저장 (5분 TTL)
-    fileStore.set(fileId, {
+    // DB에 파일 저장
+    const fileId = randomUUID()
+    await saveFile(
+      fileId,
       buffer,
       filename,
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      createdAt: Date.now()
-    })
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
 
     // 다운로드 링크 생성
     const downloadUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://claude-ccusage-dashboard.vercel.app'}/api/download/${fileId}`
@@ -150,7 +148,7 @@ export async function POST(request: NextRequest) {
 📥 *엑셀 다운로드:* ${downloadUrl}
 ⏰ *링크 유효시간:* 5분
 
-_파일이 자동 생성되었습니다. 링크는 5분 후 또는 다운로드 후 만료됩니다._`
+_링크는 5분 후 또는 다운로드 후 만료됩니다._`
 
     // Slack 메시지 전송
     const response = await fetch('https://slack.com/api/chat.postMessage', {
