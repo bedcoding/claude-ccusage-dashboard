@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fileStore } from '@/lib/fileStore'
+import { getFile, deleteFile, cleanupExpiredFiles } from '@/lib/db'
 
 export async function GET(
   request: NextRequest,
@@ -8,8 +8,11 @@ export async function GET(
   try {
     const { id } = await params
 
-    // 파일 가져오기
-    const file = fileStore.get(id)
+    // 만료된 파일 정리 (다운로드 시 자동 정리)
+    await cleanupExpiredFiles()
+
+    // DB에서 파일 가져오기
+    const file = await getFile(id)
 
     if (!file) {
       return NextResponse.json(
@@ -19,14 +22,14 @@ export async function GET(
     }
 
     // 파일 다운로드 후 즉시 삭제
-    fileStore.delete(id)
+    await deleteFile(id)
 
-    // 파일 응답
-    return new NextResponse(file.buffer as unknown as BodyInit, {
+    // 파일 응답 (Buffer를 Uint8Array로 변환)
+    return new NextResponse(new Uint8Array(file.data), {
       headers: {
         'Content-Type': file.mimeType,
         'Content-Disposition': `attachment; filename="${encodeURIComponent(file.filename)}"`,
-        'Content-Length': file.buffer.length.toString(),
+        'Content-Length': file.data.length.toString(),
       },
     })
 
