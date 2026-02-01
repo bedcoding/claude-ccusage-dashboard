@@ -119,7 +119,7 @@ fi
         {/* 설정 섹션 */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem', color: '#1e293b' }}>
-            2️⃣ 설정
+            1️⃣ 설정
           </h2>
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', fontWeight: '500', marginBottom: '0.5rem', color: '#475569' }}>
@@ -199,7 +199,7 @@ fi
         {/* Step 0 - 사전 준비 */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem', color: '#1e293b' }}>
-            1️⃣ 사전 준비
+            2️⃣ 사전 준비
           </h2>
           <p style={{ color: '#64748b', marginBottom: '1rem' }}>ccusage가 설치되어 있지 않다면 먼저 설치해주세요.</p>
           <div style={{
