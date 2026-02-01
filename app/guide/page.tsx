@@ -95,8 +95,8 @@ else
 fi
 `
 
-  const crontabEntry = `# 매주 월요일 오전 9시에 자동 실행
-0 9 * * 1 /bin/bash ${folderPath}/run-ccusage.sh`
+  const crontabEntry = `# 매주 월요일 오전 10시에 자동 실행
+0 10 * * 1 /bin/bash ${folderPath}/run-ccusage.sh`
 
   const copyToClipboard = async (text: string, label: string) => {
     try {
@@ -247,9 +247,9 @@ fi
             position: 'relative',
             marginBottom: '1rem'
           }}>
-            <code>nano {folderPath}/run-ccusage.sh</code>
+            <code>vi {folderPath}/run-ccusage.sh</code>
             <button
-              onClick={() => copyToClipboard(`nano ${folderPath}/run-ccusage.sh`, 'nano')}
+              onClick={() => copyToClipboard(`vi ${folderPath}/run-ccusage.sh`, 'vi')}
               style={{
                 position: 'absolute',
                 top: '1rem',
@@ -263,7 +263,7 @@ fi
                 fontSize: '0.875rem'
               }}
             >
-              {copied === 'nano' ? '✓ 복사됨!' : '📋 복사'}
+              {copied === 'vi' ? '✓ 복사됨!' : '📋 복사'}
             </button>
           </div>
           <p style={{ marginBottom: '1rem', color: '#475569' }}>
@@ -301,7 +301,7 @@ fi
             </button>
           </div>
           <p style={{ marginTop: '1rem', fontSize: '0.875rem', color: '#64748b' }}>
-            💡 nano 에디터에서 저장: <code>Ctrl + O</code>, 엔터, <code>Ctrl + X</code>
+            💡 vi 에디터에서 저장: <code>i</code>로 입력모드 → 붙여넣기 → <code>ESC</code> → <code>:wq</code> 엔터
           </p>
         </div>
 
@@ -434,6 +434,9 @@ fi
               {copied === 'crontab' ? '✓ 복사됨!' : '📋 복사'}
             </button>
           </div>
+          <p style={{ marginTop: '1rem', fontSize: '0.875rem', color: '#64748b' }}>
+            💡 vi 에디터에서 저장: <code>i</code>로 입력모드 → 붙여넣기 → <code>ESC</code> → <code>:wq</code> 엔터
+          </p>
           <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#fef3c7', borderRadius: '8px', border: '1px solid #fbbf24' }}>
             <p style={{ color: '#92400e', fontSize: '0.875rem', margin: 0 }}>
               ⚠️ <strong>macOS Catalina 이상:</strong> 터미널(또는 iTerm)에 cron 권한을 부여해야 합니다.
@@ -498,8 +501,8 @@ fi
             </thead>
             <tbody>
               <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                <td style={{ padding: '0.75rem' }}>매주 월요일 오전 9시</td>
-                <td style={{ padding: '0.75rem', fontFamily: 'monospace' }}>0 9 * * 1</td>
+                <td style={{ padding: '0.75rem' }}>매주 월요일 오전 10시</td>
+                <td style={{ padding: '0.75rem', fontFamily: 'monospace' }}>0 10 * * 1</td>
               </tr>
               <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
                 <td style={{ padding: '0.75rem' }}>매일 오전 9시</td>
