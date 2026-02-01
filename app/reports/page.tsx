@@ -7,14 +7,19 @@ export default function ReportsPage() {
   const [error, setError] = useState<string | null>(null)
   const [reports, setReports] = useState<any[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
+  const limit = 100
 
   useEffect(() => {
     fetchReports()
-  }, [])
+  }, [currentPage])
 
   const fetchReports = async () => {
+    setLoading(true)
     try {
-      const res = await fetch('/api/reports')
+      const res = await fetch(`/api/reports?page=${currentPage}&limit=${limit}`)
       const data = await res.json()
 
       if (!res.ok) {
@@ -23,6 +28,8 @@ export default function ReportsPage() {
       }
 
       setReports(data.reports)
+      setTotalPages(data.totalPages)
+      setTotal(data.total)
     } catch (err) {
       setError('리포트를 불러오는데 실패했습니다.')
     } finally {
@@ -119,7 +126,9 @@ export default function ReportsPage() {
               <h1 className="text-3xl font-bold text-gray-800 mb-2">
                 📊 Claude Max 팀 사용량 리포트
               </h1>
-              <p className="text-gray-500">최근 {reports.length}개의 리포트</p>
+              <p className="text-gray-500">
+                전체 {total}개 중 {reports.length}개 표시 (페이지 {currentPage}/{totalPages})
+              </p>
             </div>
             <button
               onClick={handleDownloadExcel}
@@ -209,6 +218,73 @@ export default function ReportsPage() {
             </div>
           ))}
         </div>
+
+        {/* 페이징 */}
+        {totalPages > 1 && (
+          <div className="mt-6 flex justify-center items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className={`px-4 py-2 rounded-lg font-bold transition-colors ${
+                currentPage === 1
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-white text-gray-700 hover:bg-gray-100 shadow-md'
+              }`}
+            >
+              처음
+            </button>
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className={`px-4 py-2 rounded-lg font-bold transition-colors ${
+                currentPage === 1
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-white text-gray-700 hover:bg-gray-100 shadow-md'
+              }`}
+            >
+              이전
+            </button>
+
+            <div className="flex gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`px-4 py-2 rounded-lg font-bold transition-colors ${
+                    pageNum === currentPage
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 shadow-md'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className={`px-4 py-2 rounded-lg font-bold transition-colors ${
+                currentPage === totalPages
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-white text-gray-700 hover:bg-gray-100 shadow-md'
+              }`}
+            >
+              다음
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className={`px-4 py-2 rounded-lg font-bold transition-colors ${
+                currentPage === totalPages
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-white text-gray-700 hover:bg-gray-100 shadow-md'
+              }`}
+            >
+              마지막
+            </button>
+          </div>
+        )}
 
         {/* 안내 */}
         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">

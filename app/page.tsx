@@ -1,1178 +1,192 @@
 'use client'
 
-import { useState, useMemo, Fragment, useEffect, useRef } from 'react'
-import type { TeamMemberData, TeamStats, CcusageData } from './types'
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import * as XLSX from 'xlsx'
+import { useRouter } from 'next/navigation'
 
 export default function Home() {
-  const [files, setFiles] = useState<File[]>([])
-  const [teamData, setTeamData] = useState<TeamMemberData[]>([])
-  const [stats, setStats] = useState<TeamStats | null>(null)
-  const [mergedData, setMergedData] = useState<CcusageData | null>(null)
-  const [message, setMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null)
-  const [copied, setCopied] = useState(false)
-  const [userName, setUserName] = useState('')
-  const [directoryHandle, setDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null)
-  const [selectedFolder, setSelectedFolder] = useState('')
-  const [customSince, setCustomSince] = useState('')
-  const [customUntil, setCustomUntil] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [slackBotToken, setSlackBotToken] = useState('')
-  const [slackChannelId, setSlackChannelId] = useState('')
-  const [isSendingToSlack, setIsSendingToSlack] = useState(false)
-  const statsRef = useRef<HTMLDivElement>(null)
-
-  // IndexedDB에서 폴더 핸들 저장/불러오기
-  const saveDirectoryHandle = async (handle: FileSystemDirectoryHandle) => {
-    try {
-      const db = await openDB()
-      const tx = db.transaction('handles', 'readwrite')
-      const store = tx.objectStore('handles')
-      store.put(handle, 'directoryHandle')
-    } catch (error) {
-      console.log('폴더 핸들 저장 실패:', error)
-    }
-  }
-
-  const loadDirectoryHandle = async () => {
-    try {
-      const db = await openDB()
-      const tx = db.transaction('handles', 'readonly')
-      const store = tx.objectStore('handles')
-      const request = store.get('directoryHandle')
-
-      request.onsuccess = async () => {
-        const handle = request.result as FileSystemDirectoryHandle
-        if (handle) {
-          // @ts-ignore - File System Access API
-          const permission = await handle.queryPermission({ mode: 'read' })
-          if (permission === 'granted') {
-            setDirectoryHandle(handle)
-            setSelectedFolder(handle.name)
-          }
-        }
-      }
-    } catch (error) {
-      console.log('폴더 핸들 복원 실패:', error)
-    }
-  }
-
-  const openDB = () => {
-    return new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('FileSystemDB', 1)
-      request.onerror = () => reject(request.error)
-      request.onsuccess = () => resolve(request.result)
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result
-        if (!db.objectStoreNames.contains('handles')) {
-          db.createObjectStore('handles')
-        }
-      }
-    })
-  }
-
-  // localStorage에서 사용자 이름 및 슬랙 설정 불러오기
-  useEffect(() => {
-    const savedName = localStorage.getItem('claudeUserName')
-    if (savedName) {
-      setUserName(savedName)
-    }
-
-    const savedSlackToken = localStorage.getItem('slackBotToken')
-    if (savedSlackToken) {
-      setSlackBotToken(savedSlackToken)
-    }
-
-    const savedSlackChannel = localStorage.getItem('slackChannelId')
-    if (savedSlackChannel) {
-      setSlackChannelId(savedSlackChannel)
-    }
-
-    // IndexedDB에서 폴더 핸들 불러오기
-    loadDirectoryHandle()
-  }, [])
-
-  // 사용자 이름 변경시 localStorage에 저장
-  const handleUserNameChange = (name: string) => {
-    setUserName(name)
-    localStorage.setItem('claudeUserName', name)
-  }
-
-  // 슬랙 설정 변경시 localStorage에 저장
-  const handleSlackTokenChange = (token: string) => {
-    setSlackBotToken(token)
-    localStorage.setItem('slackBotToken', token)
-  }
-
-  const handleSlackChannelChange = (channel: string) => {
-    setSlackChannelId(channel)
-    localStorage.setItem('slackChannelId', channel)
-  }
-
-  // 폴더 선택
-  const selectFolder = async () => {
-    try {
-      // @ts-ignore - File System Access API
-      const handle = await window.showDirectoryPicker()
-      setDirectoryHandle(handle)
-      setSelectedFolder(handle.name)
-
-      // IndexedDB에 핸들 저장
-      await saveDirectoryHandle(handle)
-
-      setMessage({ text: `폴더 "${handle.name}" 선택 완료!`, type: 'success' })
-      setTimeout(() => setMessage(null), 3000)
-    } catch (error) {
-      if ((error as Error).name !== 'AbortError') {
-        setMessage({ text: '폴더 선택 실패. Chrome/Edge 브라우저를 사용해주세요.', type: 'error' })
-        setTimeout(() => setMessage(null), 3000)
-      }
-    }
-  }
-
-  // 선택된 폴더에서 파일 자동 불러오기
-  const loadFileFromFolder = async () => {
-    if (!directoryHandle) {
-      setMessage({ text: '먼저 폴더를 선택해주세요.', type: 'error' })
-      setTimeout(() => setMessage(null), 3000)
-      return
-    }
-
-    if (!userName) {
-      setMessage({ text: '먼저 이름을 입력해주세요.', type: 'error' })
-      setTimeout(() => setMessage(null), 3000)
-      return
-    }
-
-    // 권한 확인 및 요청 (사용자 제스처 컨텍스트에서 실행)
-    try {
-      // @ts-ignore - File System Access API
-      const permission = await directoryHandle.queryPermission({ mode: 'read' })
-      if (permission !== 'granted') {
-        // @ts-ignore - File System Access API
-        const requestPermission = await directoryHandle.requestPermission({ mode: 'read' })
-        if (requestPermission !== 'granted') {
-          setMessage({ text: '폴더 접근 권한이 필요합니다.', type: 'error' })
-          setTimeout(() => setMessage(null), 3000)
-          return
-        }
-      }
-    } catch (error) {
-      setMessage({ text: '권한 요청 실패. 폴더를 다시 선택해주세요.', type: 'error' })
-      setTimeout(() => setMessage(null), 3000)
-      return
-    }
-
-    setIsLoading(true)
-    setMessage({ text: '파일을 불러오는 중...', type: 'success' })
-
-    try {
-      const fileName = `${userName}.json`
-      const fileHandle = await directoryHandle.getFileHandle(fileName)
-      const file = await fileHandle.getFile()
-
-      // 기존 파일 처리 로직 재사용
-      const isDuplicate = files.some(f => f.name === file.name)
-      if (isDuplicate) {
-        setMessage({ text: '이미 추가된 파일입니다.', type: 'error' })
-        setTimeout(() => setMessage(null), 3000)
-        setIsLoading(false)
-        return
-      }
-
-      setFiles(prev => [...prev, file])
-      await processFiles([...files, file])
-
-      setMessage({ text: `✅ "${fileName}" 파일을 성공적으로 불러왔습니다!`, type: 'success' })
-      setTimeout(() => setMessage(null), 3000)
-
-      // 결과로 부드럽게 스크롤
-      setTimeout(() => {
-        statsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 300)
-    } catch (error) {
-      setMessage({ text: `"${userName}.json" 파일을 찾을 수 없습니다. 먼저 터미널에서 명령어를 실행해주세요.`, type: 'error' })
-      setTimeout(() => setMessage(null), 5000)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // 이번 주 월요일~일요일 계산
-  const weekDates = useMemo(() => {
-    const today = new Date()
-    const day = today.getDay()
-    const diff = day === 0 ? -6 : 1 - day // 월요일로 조정
-
-    const monday = new Date(today)
-    monday.setDate(today.getDate() + diff)
-
-    const sunday = new Date(monday)
-    sunday.setDate(monday.getDate() + 6)
-
-    const formatDate = (date: Date) => {
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      return `${year}${month}${day}`
-    }
-
-    return {
-      since: formatDate(monday),
-      until: formatDate(sunday),
-      display: `${monday.getMonth() + 1}/${monday.getDate()} - ${sunday.getMonth() + 1}/${sunday.getDate()}`
-    }
-  }, [])
-
-  // 날짜 형식 변환 함수 (YYYY-MM-DD → YYYYMMDD)
-  const formatDateForCommand = (dateStr: string) => {
-    return dateStr.replace(/-/g, '')
-  }
-
-  // 날짜 형식 변환 함수 (YYYYMMDD → YYYY-MM-DD)
-  const formatDateForInput = (dateStr: string) => {
-    if (dateStr.length !== 8) return ''
-    return `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
-  }
-
-  // 명령어에 사용할 날짜 계산
-  const since = customSince ? formatDateForCommand(customSince) : weekDates.since
-  const until = customUntil ? formatDateForCommand(customUntil) : weekDates.until
-
-  const command = `npx ccusage daily --json --since ${since} --until ${until} > ${userName || '이름'}.json`
-
-  const copyCommand = async () => {
-    try {
-      await navigator.clipboard.writeText(command)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (err) {
-      setMessage({ text: '복사 실패. 수동으로 복사해주세요.', type: 'error' })
-      setTimeout(() => setMessage(null), 3000)
-    }
-  }
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.currentTarget.classList.add('drag-over')
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.currentTarget.classList.remove('drag-over')
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.currentTarget.classList.remove('drag-over')
-    const droppedFiles = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/json')
-    handleFilesAdded(droppedFiles)
-  }
-
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const selectedFiles = Array.from(e.target.files).filter(f => f.type === 'application/json')
-      handleFilesAdded(selectedFiles)
-    }
-  }
-
-  const handleFilesAdded = (newFiles: File[]) => {
-    const uniqueFiles = newFiles.filter(
-      newFile => !files.some(existingFile => existingFile.name === newFile.name)
-    )
-
-    if (uniqueFiles.length === 0) {
-      setMessage({ text: '이미 추가된 파일입니다.', type: 'error' })
-      setTimeout(() => setMessage(null), 3000)
-      return
-    }
-
-    setFiles(prev => [...prev, ...uniqueFiles])
-    processFiles([...files, ...uniqueFiles])
-  }
-
-  const removeFile = (index: number) => {
-    const newFiles = files.filter((_, i) => i !== index)
-    setFiles(newFiles)
-    if (newFiles.length === 0) {
-      setTeamData([])
-      setStats(null)
-      setMergedData(null)
-    } else {
-      processFiles(newFiles)
-    }
-  }
-
-  const processFiles = async (filesToProcess: File[]) => {
-    try {
-      const parsedData: TeamMemberData[] = []
-
-      for (const file of filesToProcess) {
-        const text = await file.text()
-        const data: CcusageData = JSON.parse(text)
-
-        // 파일명에서 확장자 제거하여 이름 추출
-        const name = file.name.replace('.json', '')
-
-        parsedData.push({
-          name,
-          fileName: file.name,
-          data
-        })
-      }
-
-      setTeamData(parsedData)
-      calculateStats(parsedData)
-      setMessage({ text: `${filesToProcess.length}개 파일 분석 완료!`, type: 'success' })
-      setTimeout(() => setMessage(null), 3000)
-    } catch (error) {
-      setMessage({ text: `파일 처리 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`, type: 'error' })
-      setTimeout(() => setMessage(null), 5000)
-    }
-  }
-
-  const calculateStats = (data: TeamMemberData[]) => {
-    const members = data.map(member => ({
-      name: member.name,
-      cost: member.data.totals.totalCost,
-      tokens: member.data.totals.totalTokens,
-      percentage: 0
-    }))
-
-    const totalCost = members.reduce((sum, m) => sum + m.cost, 0)
-    const totalTokens = members.reduce((sum, m) => sum + m.tokens, 0)
-
-    // 비율 계산
-    members.forEach(member => {
-      member.percentage = (member.cost / totalCost) * 100
-    })
-
-    // 일별 추이 데이터 수집
-    const periodMap = new Map<string, { totalCost: number; totalTokens: number }>()
-
-    data.forEach(member => {
-      member.data.daily.forEach(day => {
-        const existing = periodMap.get(day.date) || { totalCost: 0, totalTokens: 0 }
-        periodMap.set(day.date, {
-          totalCost: existing.totalCost + day.totalCost,
-          totalTokens: existing.totalTokens + day.totalTokens
-        })
-      })
-    })
-
-    const weeklyTrends = Array.from(periodMap.entries())
-      .map(([week, data]) => ({ week, ...data }))
-      .sort((a, b) => a.week.localeCompare(b.week))
-
-    const stats: TeamStats = {
-      totalMembers: data.length,
-      totalCost,
-      totalTokens,
-      avgCostPerMember: totalCost / data.length,
-      avgTokensPerMember: totalTokens / data.length,
-      members,
-      weeklyTrends
-    }
-
-    setStats(stats)
-
-    // 전체 데이터 병합
-    if (data.length > 0) {
-      mergeMemberData(data)
-    }
-  }
-
-  const mergeMemberData = (data: TeamMemberData[]) => {
-    // 일별 데이터를 날짜별로 병합
-    const dailyMap = new Map<string, any>()
-
-    data.forEach(member => {
-      member.data.daily.forEach(day => {
-        const existing = dailyMap.get(day.date)
-
-        if (!existing) {
-          // 새로운 날짜
-          dailyMap.set(day.date, {
-            date: day.date,
-            inputTokens: day.inputTokens,
-            outputTokens: day.outputTokens,
-            cacheCreationTokens: day.cacheCreationTokens,
-            cacheReadTokens: day.cacheReadTokens,
-            totalTokens: day.totalTokens,
-            totalCost: day.totalCost,
-            modelsUsed: new Set(day.modelsUsed),
-            modelBreakdowns: new Map<string, any>()
-          })
-
-          // 모델별 breakdown 추가
-          day.modelBreakdowns.forEach(model => {
-            dailyMap.get(day.date)!.modelBreakdowns.set(model.modelName, {
-              modelName: model.modelName,
-              inputTokens: model.inputTokens,
-              outputTokens: model.outputTokens,
-              cacheCreationTokens: model.cacheCreationTokens,
-              cacheReadTokens: model.cacheReadTokens,
-              cost: model.cost
-            })
-          })
-        } else {
-          // 기존 날짜에 데이터 합산
-          existing.inputTokens += day.inputTokens
-          existing.outputTokens += day.outputTokens
-          existing.cacheCreationTokens += day.cacheCreationTokens
-          existing.cacheReadTokens += day.cacheReadTokens
-          existing.totalTokens += day.totalTokens
-          existing.totalCost += day.totalCost
-          day.modelsUsed.forEach(model => existing.modelsUsed.add(model))
-
-          // 모델별 breakdown 병합
-          day.modelBreakdowns.forEach(model => {
-            const existingModel = existing.modelBreakdowns.get(model.modelName)
-            if (existingModel) {
-              existingModel.inputTokens += model.inputTokens
-              existingModel.outputTokens += model.outputTokens
-              existingModel.cacheCreationTokens += model.cacheCreationTokens
-              existingModel.cacheReadTokens += model.cacheReadTokens
-              existingModel.cost += model.cost
-            } else {
-              existing.modelBreakdowns.set(model.modelName, {
-                modelName: model.modelName,
-                inputTokens: model.inputTokens,
-                outputTokens: model.outputTokens,
-                cacheCreationTokens: model.cacheCreationTokens,
-                cacheReadTokens: model.cacheReadTokens,
-                cost: model.cost
-              })
-            }
-          })
-        }
-      })
-    })
-
-    // Map을 배열로 변환하고 정렬
-    const mergedDaily = Array.from(dailyMap.values())
-      .map(day => ({
-        ...day,
-        modelsUsed: Array.from(day.modelsUsed),
-        modelBreakdowns: Array.from(day.modelBreakdowns.values())
-      }))
-      .sort((a, b) => a.date.localeCompare(b.date))
-
-    // 전체 합계 계산
-    const totals = {
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheCreationTokens: 0,
-      cacheReadTokens: 0,
-      totalTokens: 0,
-      totalCost: 0
-    }
-
-    mergedDaily.forEach(day => {
-      totals.inputTokens += day.inputTokens
-      totals.outputTokens += day.outputTokens
-      totals.cacheCreationTokens += day.cacheCreationTokens
-      totals.cacheReadTokens += day.cacheReadTokens
-      totals.totalTokens += day.totalTokens
-      totals.totalCost += day.totalCost
-    })
-
-    const merged: CcusageData = {
-      daily: mergedDaily,
-      totals
-    }
-
-    setMergedData(merged)
-  }
-
-  const testSlackMessage = async () => {
-    if (!slackBotToken || !slackChannelId) {
-      setMessage({ text: '슬랙 Bot Token과 채널 ID를 먼저 입력해주세요.', type: 'error' })
-      setTimeout(() => setMessage(null), 3000)
-      return
-    }
-
-    setIsSendingToSlack(true)
-    setMessage({ text: '테스트 메시지 전송 중...', type: 'success' })
-
-    try {
-      const testText = `🧪 슬랙 연동 테스트 메시지\n\n현재 시간: ${new Date().toLocaleString('ko-KR')}\n\n✅ chat:write 권한이 정상적으로 작동합니다!`
-
-      const response = await fetch('/api/slack/message', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          slackToken: slackBotToken,
-          channelId: slackChannelId,
-          text: testText
-        })
-      })
-
-      const result = await response.json()
-
-      if (result.ok) {
-        setMessage({ text: '✅ 테스트 메시지 전송 완료!', type: 'success' })
-      } else {
-        setMessage({ text: `테스트 실패: ${result.error}`, type: 'error' })
-      }
-    } catch (error) {
-      setMessage({ text: `테스트 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`, type: 'error' })
-    } finally {
-      setIsSendingToSlack(false)
-      setTimeout(() => setMessage(null), 5000)
-    }
-  }
-
-  const sendLinkToSlack = async () => {
-    if (!teamData.length) return
-
-    if (!slackBotToken || !slackChannelId) {
-      setMessage({ text: '슬랙 Bot Token과 채널 ID를 먼저 입력해주세요.', type: 'error' })
-      setTimeout(() => setMessage(null), 3000)
-      return
-    }
-
-    setIsSendingToSlack(true)
-    setMessage({ text: '다운로드 링크 생성 중...', type: 'success' })
-
-    try {
-      // API Route를 통한 Slack 링크 전송
-      const response = await fetch('/api/slack/send-link', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          slackToken: slackBotToken,
-          channelId: slackChannelId,
-          stats,
-          mergedData,
-          teamData,
-          customSince,
-          customUntil,
-          weekDates,
-          userName
-        })
-      })
-
-      const result = await response.json()
-
-      if (result.ok) {
-        // 클립보드에 URL 복사
-        try {
-          await navigator.clipboard.writeText(result.reportsUrl)
-
-          if (result.slackSent) {
-            setMessage({
-              text: `✅ 슬랙 전송 완료! 리포트 페이지 링크가 클립보드에 복사되었습니다.\n📥 ${result.reportsUrl}`,
-              type: 'success'
-            })
-          } else {
-            setMessage({
-              text: `⚠️ 리포트가 생성되었지만 슬랙 전송은 실패했습니다.\n오류: ${result.slackError}\n\n📥 리포트 링크 (클립보드 복사됨): ${result.reportsUrl}`,
-              type: 'success'
-            })
-          }
-        } catch {
-          if (result.slackSent) {
-            setMessage({
-              text: `✅ 슬랙 전송 완료!\n📥 리포트 링크: ${result.reportsUrl}`,
-              type: 'success'
-            })
-          } else {
-            setMessage({
-              text: `⚠️ 리포트가 생성되었지만 슬랙 전송은 실패했습니다.\n오류: ${result.slackError}\n\n📥 리포트 링크: ${result.reportsUrl}`,
-              type: 'success'
-            })
-          }
-        }
-      } else {
-        setMessage({ text: `링크 생성 실패: ${result.error}`, type: 'error' })
-      }
-    } catch (error) {
-      setMessage({ text: `슬랙 전송 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`, type: 'error' })
-    } finally {
-      setIsSendingToSlack(false)
-      setTimeout(() => setMessage(null), 5000)
-    }
-  }
-
-  const exportToExcel = () => {
-    if (!teamData.length) return
-
-    // 전체 통합 데이터 시트
-    const mergedSheetData: any[] = []
-    if (mergedData) {
-      mergedData.daily.forEach(day => {
-        // 일별 총계 행
-        mergedSheetData.push({
-          'date': day.date,
-          'inputTokens': day.inputTokens,
-          'outputTokens': day.outputTokens,
-          'cacheCreationTokens': day.cacheCreationTokens,
-          'cacheReadTokens': day.cacheReadTokens,
-          'totalTokens': day.totalTokens,
-          'totalCost': day.totalCost.toFixed(2),
-          'modelsUsed': day.modelsUsed.join(', ')
-        })
-
-        // 모델별 breakdown
-        day.modelBreakdowns.forEach((model: any) => {
-          mergedSheetData.push({
-            'date': '',
-            'inputTokens': model.inputTokens,
-            'outputTokens': model.outputTokens,
-            'cacheCreationTokens': model.cacheCreationTokens,
-            'cacheReadTokens': model.cacheReadTokens,
-            'totalTokens': model.inputTokens + model.outputTokens + model.cacheCreationTokens + model.cacheReadTokens,
-            'totalCost': model.cost.toFixed(2),
-            'modelsUsed': `  └ ${model.modelName}`
-          })
-        })
-      })
-
-      // 전체 총계
-      mergedSheetData.push({
-        'date': '전체 총계',
-        'inputTokens': mergedData.totals.inputTokens,
-        'outputTokens': mergedData.totals.outputTokens,
-        'cacheCreationTokens': mergedData.totals.cacheCreationTokens,
-        'cacheReadTokens': mergedData.totals.cacheReadTokens,
-        'totalTokens': mergedData.totals.totalTokens,
-        'totalCost': mergedData.totals.totalCost.toFixed(2),
-        'modelsUsed': ''
-      })
-    }
-
-    // 상세 데이터 시트 (파일별)
-    const detailData: any[] = []
-
-    teamData.forEach(member => {
-      member.data.daily.forEach(day => {
-        // 일별 총계 행
-        detailData.push({
-          '파일명': member.name,
-          'date': day.date,
-          'inputTokens': day.inputTokens,
-          'outputTokens': day.outputTokens,
-          'cacheCreationTokens': day.cacheCreationTokens,
-          'cacheReadTokens': day.cacheReadTokens,
-          'totalTokens': day.totalTokens,
-          'totalCost': day.totalCost.toFixed(2),
-          'modelsUsed': day.modelsUsed.join(', ')
-        })
-
-        // 모델별 breakdown
-        day.modelBreakdowns.forEach(model => {
-          detailData.push({
-            '파일명': '',
-            'date': '',
-            'inputTokens': model.inputTokens,
-            'outputTokens': model.outputTokens,
-            'cacheCreationTokens': model.cacheCreationTokens,
-            'cacheReadTokens': model.cacheReadTokens,
-            'totalTokens': model.inputTokens + model.outputTokens + model.cacheCreationTokens + model.cacheReadTokens,
-            'totalCost': model.cost.toFixed(2),
-            'modelsUsed': `  └ ${model.modelName}`
-          })
-        })
-      })
-
-      // 파일별 총계
-      detailData.push({
-        '파일명': `${member.name} 총계`,
-        'date': '',
-        'inputTokens': member.data.totals.inputTokens,
-        'outputTokens': member.data.totals.outputTokens,
-        'cacheCreationTokens': member.data.totals.cacheCreationTokens,
-        'cacheReadTokens': member.data.totals.cacheReadTokens,
-        'totalTokens': member.data.totals.totalTokens,
-        'totalCost': member.data.totals.totalCost.toFixed(2),
-        'modelsUsed': ''
-      })
-      detailData.push({}) // 빈 행
-    })
-
-    // 요약 데이터 시트
-    const summaryData = stats?.members.map(member => ({
-      '파일명': member.name,
-      'totalCost': member.cost.toFixed(2),
-      'totalTokens': member.tokens,
-      'percentage': member.percentage.toFixed(1)
-    }))
-
-    // 엑셀 워크북 생성
-    const wb = XLSX.utils.book_new()
-
-    if (mergedData) {
-      const wsMerged = XLSX.utils.json_to_sheet(mergedSheetData)
-      XLSX.utils.book_append_sheet(wb, wsMerged, '전체 통합')
-    }
-
-    const wsDetail = XLSX.utils.json_to_sheet(detailData)
-    const wsSummary = XLSX.utils.json_to_sheet(summaryData || [])
-
-    XLSX.utils.book_append_sheet(wb, wsDetail, '파일별 상세')
-    XLSX.utils.book_append_sheet(wb, wsSummary, '요약')
-
-    // 파일 다운로드
-    const fileName = `Claude_Usage_${new Date().toISOString().split('T')[0]}.xlsx`
-    XLSX.writeFile(wb, fileName)
-  }
+  const router = useRouter()
 
   return (
-    <main>
-      {message && (
-        <div className={`global-snackbar ${message.type}`}>
-          {message.text}
-        </div>
-      )}
-
-      <div className="container">
-        <header className="header">
+    <main className="landing-page">
+      <div className="landing-container">
+        <header className="landing-header">
           <h1>🚀 Claude Max 팀 사용량 대시보드</h1>
-          <p>팀원들의 Claude Max 사용량을 한눈에 확인하세요</p>
+          <p>팀원들의 Claude Max 사용량을 관리하고 조회하세요</p>
         </header>
 
-        <div className="command-section">
-          <div className="command-header">
-            <h2>📋 이번 주 데이터 수집 명령어</h2>
-            <p className="command-period">사전 준비: <code>npm install -g ccusage</code></p>
-          </div>
-          <div className="input-row">
-            <div className="name-input-container">
-              <label htmlFor="userName">👤 이름 입력</label>
-              <input
-                id="userName"
-                type="text"
-                value={userName}
-                onChange={(e) => handleUserNameChange(e.target.value)}
-                placeholder="이름을 넣으면 localStorage에 저장됩니다."
-                className="name-input"
-              />
-            </div>
-            <div className="date-input-container">
-              <label htmlFor="dateSince">📅 날짜 범위 (선택)</label>
-              <div className="date-inputs">
-                <input
-                  id="dateSince"
-                  type="date"
-                  value={customSince || formatDateForInput(weekDates.since)}
-                  onChange={(e) => setCustomSince(e.target.value)}
-                  className="date-input"
-                />
-                <span className="date-separator">~</span>
-                <input
-                  id="dateUntil"
-                  type="date"
-                  value={customUntil || formatDateForInput(weekDates.until)}
-                  onChange={(e) => setCustomUntil(e.target.value)}
-                  className="date-input"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="command-box" onClick={copyCommand}>
-            <code>{command}</code>
-            <button className="copy-button">
-              {copied ? '✓ 복사됨!' : '📋 복사'}
-            </button>
-          </div>
-          <div className="command-instructions">
-            <p>1️⃣ 이름 입력 후 위 명령어 클릭하여 복사</p>
-            <p>2️⃣ 터미널에 붙여넣기 후 실행</p>
-            <p>3️⃣ 생성된 JSON 파일을 아래에 업로드</p>
-          </div>
-        </div>
-
-        <div className="slack-settings-section">
-          <div className="command-header">
-            <h2>💬 슬랙 설정</h2>
-            <p>슬랙으로 리포트를 전송하려면 Bot Token과 채널 ID를 입력하세요</p>
-          </div>
-          <div className="input-row">
-            <div className="name-input-container">
-              <label htmlFor="slackToken">🔑 Slack Bot Token</label>
-              <input
-                id="slackToken"
-                type="text"
-                value={slackBotToken}
-                onChange={(e) => handleSlackTokenChange(e.target.value)}
-                placeholder="xoxb-로 시작하는 Bot Token"
-                className="name-input"
-              />
-            </div>
-            <div className="name-input-container">
-              <label htmlFor="slackChannel">📢 채널 ID</label>
-              <input
-                id="slackChannel"
-                type="text"
-                value={slackChannelId}
-                onChange={(e) => handleSlackChannelChange(e.target.value)}
-                placeholder="C로 시작하는 채널 ID (예: C1234567890)"
-                className="name-input"
-              />
-            </div>
-          </div>
-          <div className="command-instructions">
-            <p>💡 Bot Token은 팀장에게 받으세요</p>
-            <p>💡 채널 ID는 슬랙 채널 우클릭 → '채널 세부정보 보기' → 맨 아래에서 확인</p>
-          </div>
-          <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-            <button
-              onClick={testSlackMessage}
-              disabled={isSendingToSlack || !slackBotToken || !slackChannelId}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: isSendingToSlack ? '#94a3b8' : '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '0.875rem',
-                fontWeight: '600',
-                cursor: (!slackBotToken || !slackChannelId || isSendingToSlack) ? 'not-allowed' : 'pointer',
-                opacity: (!slackBotToken || !slackChannelId) ? 0.5 : 1
-              }}
-            >
-              {isSendingToSlack ? '⏳ 전송 중...' : '🧪 연동 테스트'}
-            </button>
-          </div>
-        </div>
-
-        <div className="auto-load-section">
-          <div className="auto-load-header">
-            <h2>🚀 빠른 파일 불러오기</h2>
-            <p>폴더를 선택하면 자동으로 파일을 찾아옵니다</p>
-          </div>
-          <div className="auto-load-buttons">
-            <button className="folder-select-button" onClick={selectFolder}>
-              📂 폴더 선택
-              {selectedFolder && <span className="folder-name"> ({selectedFolder})</span>}
-            </button>
-            <button
-              className="auto-load-button"
-              onClick={loadFileFromFolder}
-              disabled={!directoryHandle || !userName || isLoading}
-            >
-              {isLoading ? '⏳ 불러오는 중...' : `⚡ ${userName || '이름'}.json 자동 불러오기`}
-            </button>
-          </div>
-        </div>
-
-        <div className="upload-section">
-          <div
-            className="upload-zone"
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => document.getElementById('fileInput')?.click()}
+        <div className="button-grid">
+          <button
+            onClick={() => router.push('/upload')}
+            className="landing-button save-button"
           >
-            <div className="upload-icon">📁</div>
-            <div className="upload-text">JSON 파일을 드래그하거나 클릭하여 업로드</div>
-            <div className="upload-hint">ccusage로 추출한 JSON 파일을 업로드하세요 (여러 개 가능)</div>
-            <input
-              id="fileInput"
-              type="file"
-              accept=".json"
-              multiple
-              onChange={handleFileInput}
-              style={{ display: 'none' }}
-            />
-          </div>
-
-          {files.length > 0 && (
-            <div className="file-list">
-              {files.map((file, index) => (
-                <div key={index} className="file-item">
-                  <span className="file-name">📄 {file.name}</span>
-                  <button className="file-remove" onClick={(e) => {
-                    e.stopPropagation()
-                    removeFile(index)
-                  }}>×</button>
-                </div>
-              ))}
+            <div className="button-icon">💾</div>
+            <div className="button-title">사용량 전송</div>
+            <div className="button-description">
+              Claude 사용량 데이터를 수동으로 저장합니다
             </div>
-          )}
+          </button>
+
+          <button
+            onClick={() => router.push('/reports')}
+            className="landing-button view-button"
+          >
+            <div className="button-icon">📊</div>
+            <div className="button-title">사용량 조회</div>
+            <div className="button-description">
+              저장된 리포트를 조회하고 확인합니다
+            </div>
+          </button>
+
+          <button
+            onClick={() => router.push('/guide')}
+            className="landing-button guide-button"
+          >
+            <div className="button-icon">⚡</div>
+            <div className="button-title">자동화 가이드</div>
+            <div className="button-description">
+              Claude 사용량 데이터를 맥북 CronTab을 사용해서 자동으로 DB에 저장하는 방법을 가이드합니다.
+            </div>
+          </button>
         </div>
-
-        {stats && (
-          <>
-            <div className="stats-grid" ref={statsRef}>
-              <div className="stat-card">
-                <div className="stat-label">파일 개수</div>
-                <div className="stat-value">{stats.totalMembers}</div>
-                <div className="stat-subtext">개</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-label">총 비용</div>
-                <div className="stat-value">${stats.totalCost.toFixed(2)}</div>
-                <div className="stat-subtext">USD</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-label">총 토큰</div>
-                <div className="stat-value">{(stats.totalTokens / 1000000).toFixed(1)}M</div>
-                <div className="stat-subtext">tokens</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-label">파일당 평균 비용</div>
-                <div className="stat-value">${stats.avgCostPerMember.toFixed(2)}</div>
-                <div className="stat-subtext">USD</div>
-              </div>
-            </div>
-
-            {mergedData && (
-              <div className="table-card">
-                <div className="table-header">
-                  <div className="chart-title">전체 사용 내역 (통합)</div>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button className="excel-button" onClick={exportToExcel}>
-                      📊 엑셀 다운로드
-                    </button>
-                    <button
-                      className="excel-button"
-                      onClick={sendLinkToSlack}
-                      disabled={isSendingToSlack || !slackBotToken || !slackChannelId}
-                      style={{
-                        background: isSendingToSlack ? '#94a3b8' : '#3b82f6',
-                        opacity: (!slackBotToken || !slackChannelId) ? 0.5 : 1,
-                        cursor: (!slackBotToken || !slackChannelId || isSendingToSlack) ? 'not-allowed' : 'pointer'
-                      }}
-                    >
-                      {isSendingToSlack ? '⏳ 전송 중...' : '🔗 슬랙으로 url 전송'}
-                    </button>
-                  </div>
-                </div>
-                <div className="table-scroll">
-                  <table className="detail-table">
-                    <thead>
-                      <tr>
-                        <th>date</th>
-                        <th>inputTokens</th>
-                        <th>outputTokens</th>
-                        <th>cacheCreationTokens</th>
-                        <th>cacheReadTokens</th>
-                        <th>totalTokens</th>
-                        <th>totalCost</th>
-                        <th>modelsUsed</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mergedData.daily.map((day, dayIdx) => (
-                        <Fragment key={dayIdx}>
-                          <tr className="week-row">
-                            <td>{day.date}</td>
-                            <td>{day.inputTokens.toLocaleString()}</td>
-                            <td>{day.outputTokens.toLocaleString()}</td>
-                            <td>{day.cacheCreationTokens.toLocaleString()}</td>
-                            <td>{day.cacheReadTokens.toLocaleString()}</td>
-                            <td>{day.totalTokens.toLocaleString()}</td>
-                            <td><strong>${day.totalCost.toFixed(2)}</strong></td>
-                            <td>{day.modelsUsed.join(', ')}</td>
-                          </tr>
-                          {day.modelBreakdowns.map((model: any, modelIdx: number) => (
-                            <tr key={`${dayIdx}-${modelIdx}`} className="model-row">
-                              <td></td>
-                              <td>{model.inputTokens.toLocaleString()}</td>
-                              <td>{model.outputTokens.toLocaleString()}</td>
-                              <td>{model.cacheCreationTokens.toLocaleString()}</td>
-                              <td>{model.cacheReadTokens.toLocaleString()}</td>
-                              <td>{(model.inputTokens + model.outputTokens + model.cacheCreationTokens + model.cacheReadTokens).toLocaleString()}</td>
-                              <td>${model.cost.toFixed(2)}</td>
-                              <td className="model-name">└ {model.modelName}</td>
-                            </tr>
-                          ))}
-                        </Fragment>
-                      ))}
-                      <tr className="total-row">
-                        <td><strong>전체 총계</strong></td>
-                        <td>{mergedData.totals.inputTokens.toLocaleString()}</td>
-                        <td>{mergedData.totals.outputTokens.toLocaleString()}</td>
-                        <td>{mergedData.totals.cacheCreationTokens.toLocaleString()}</td>
-                        <td>{mergedData.totals.cacheReadTokens.toLocaleString()}</td>
-                        <td>{mergedData.totals.totalTokens.toLocaleString()}</td>
-                        <td><strong>${mergedData.totals.totalCost.toFixed(2)}</strong></td>
-                        <td></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            <div className="table-card">
-              <div className="table-header">
-                <div className="chart-title">상세 사용 내역 (파일별)</div>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button className="excel-button" onClick={exportToExcel}>
-                    📊 엑셀 다운로드
-                  </button>
-                  <button
-                    className="excel-button"
-                    onClick={sendLinkToSlack}
-                    disabled={isSendingToSlack || !slackBotToken || !slackChannelId}
-                    style={{
-                      background: isSendingToSlack ? '#94a3b8' : '#3b82f6',
-                      opacity: (!slackBotToken || !slackChannelId) ? 0.5 : 1,
-                      cursor: (!slackBotToken || !slackChannelId || isSendingToSlack) ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    {isSendingToSlack ? '⏳ 전송 중...' : '🔗 슬랙으로 전송'}
-                  </button>
-                </div>
-              </div>
-              <div className="table-scroll">
-                <table className="detail-table">
-                  <thead>
-                    <tr>
-                      <th>파일명</th>
-                      <th>date</th>
-                      <th>inputTokens</th>
-                      <th>outputTokens</th>
-                      <th>cacheCreationTokens</th>
-                      <th>cacheReadTokens</th>
-                      <th>totalTokens</th>
-                      <th>totalCost</th>
-                      <th>modelsUsed</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {teamData.map((member, memberIdx) => (
-                      <Fragment key={memberIdx}>
-                        {member.data.daily.map((day, dayIdx) => (
-                          <Fragment key={`${memberIdx}-${dayIdx}`}>
-                            <tr key={`${memberIdx}-${dayIdx}`} className="week-row">
-                              <td><strong>{member.name}</strong></td>
-                              <td>{day.date}</td>
-                              <td>{day.inputTokens.toLocaleString()}</td>
-                              <td>{day.outputTokens.toLocaleString()}</td>
-                              <td>{day.cacheCreationTokens.toLocaleString()}</td>
-                              <td>{day.cacheReadTokens.toLocaleString()}</td>
-                              <td>{day.totalTokens.toLocaleString()}</td>
-                              <td><strong>${day.totalCost.toFixed(2)}</strong></td>
-                              <td>{day.modelsUsed.join(', ')}</td>
-                            </tr>
-                            {day.modelBreakdowns.map((model, modelIdx) => (
-                              <tr key={`${memberIdx}-${dayIdx}-${modelIdx}`} className="model-row">
-                                <td></td>
-                                <td></td>
-                                <td>{model.inputTokens.toLocaleString()}</td>
-                                <td>{model.outputTokens.toLocaleString()}</td>
-                                <td>{model.cacheCreationTokens.toLocaleString()}</td>
-                                <td>{model.cacheReadTokens.toLocaleString()}</td>
-                                <td>{(model.inputTokens + model.outputTokens + model.cacheCreationTokens + model.cacheReadTokens).toLocaleString()}</td>
-                                <td>${model.cost.toFixed(2)}</td>
-                                <td className="model-name">└ {model.modelName}</td>
-                              </tr>
-                            ))}
-                          </Fragment>
-                        ))}
-                        <tr className="total-row">
-                          <td><strong>{member.name} 총계</strong></td>
-                          <td></td>
-                          <td>{member.data.totals.inputTokens.toLocaleString()}</td>
-                          <td>{member.data.totals.outputTokens.toLocaleString()}</td>
-                          <td>{member.data.totals.cacheCreationTokens.toLocaleString()}</td>
-                          <td>{member.data.totals.cacheReadTokens.toLocaleString()}</td>
-                          <td>{member.data.totals.totalTokens.toLocaleString()}</td>
-                          <td><strong>${member.data.totals.totalCost.toFixed(2)}</strong></td>
-                          <td></td>
-                        </tr>
-                        {memberIdx < teamData.length - 1 && (
-                          <tr className="separator-row">
-                            <td colSpan={9}></td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="chart-card">
-              <div className="chart-title">totalCost</div>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={stats.members}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip
-                    formatter={(value) => [`$${Number(value).toFixed(2)}`, 'totalCost']}
-                  />
-                  <Legend />
-                  <Bar dataKey="cost" fill="#3b82f6" name="totalCost" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="chart-card">
-              <div className="chart-title">totalTokens</div>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={stats.members}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`} />
-                  <Tooltip
-                    formatter={(value) => [`${(Number(value) / 1000000).toFixed(2)}M`, 'totalTokens']}
-                  />
-                  <Legend />
-                  <Bar dataKey="tokens" fill="#10b981" name="totalTokens" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {stats.weeklyTrends.length > 0 && (
-              <div className="chart-card">
-                <div className="chart-title">일별 totalCost 추이</div>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={stats.weeklyTrends}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="week" />
-                    <YAxis />
-                    <Tooltip
-                      formatter={(value) => [`$${Number(value).toFixed(2)}`, 'totalCost']}
-                    />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="totalCost"
-                      stroke="#3b82f6"
-                      name="totalCost"
-                      strokeWidth={2}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            <div className="table-card">
-              <div className="chart-title">요약 통계</div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>파일명</th>
-                    <th>totalCost</th>
-                    <th>totalTokens</th>
-                    <th>percentage</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.members.map((member, index) => (
-                    <tr key={index}>
-                      <td><strong>{member.name}</strong></td>
-                      <td>${member.cost.toFixed(2)}</td>
-                      <td>{(member.tokens / 1000000).toFixed(2)}M</td>
-                      <td>{member.percentage.toFixed(1)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
       </div>
+
+      <style jsx>{`
+        .landing-page {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          padding: 2rem;
+        }
+
+        .landing-container {
+          max-width: 800px;
+          width: 100%;
+        }
+
+        .landing-header {
+          text-align: center;
+          margin-bottom: 4rem;
+          color: white;
+        }
+
+        .landing-header h1 {
+          font-size: 3rem;
+          font-weight: 700;
+          margin-bottom: 1rem;
+          text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .landing-header p {
+          font-size: 1.25rem;
+          opacity: 0.9;
+        }
+
+        .button-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 2rem;
+          margin-top: 2rem;
+        }
+
+        .landing-button {
+          border-radius: 20px;
+          padding: 3rem 2rem;
+          text-align: center;
+          transition: all 0.3s ease;
+          cursor: pointer;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          border: none;
+          font-family: inherit;
+          width: 100%;
+          outline: none;
+        }
+
+        .landing-button:hover {
+          transform: translateY(-8px) scale(1.02);
+        }
+
+        .save-button {
+          background: #3b82f6;
+          color: white;
+          box-shadow: 0 10px 30px rgba(59, 130, 246, 0.5);
+        }
+
+        .save-button:hover {
+          background: #2563eb;
+          box-shadow: 0 20px 50px rgba(59, 130, 246, 0.7);
+        }
+
+        .view-button {
+          background: #10b981;
+          color: white;
+          box-shadow: 0 10px 30px rgba(16, 185, 129, 0.5);
+        }
+
+        .view-button:hover {
+          background: #059669;
+          box-shadow: 0 20px 50px rgba(16, 185, 129, 0.7);
+        }
+
+        .guide-button {
+          grid-column: 1 / -1;
+          background: #f59e0b;
+          color: white;
+          box-shadow: 0 10px 30px rgba(245, 158, 11, 0.5);
+        }
+
+        .guide-button:hover {
+          background: #d97706;
+          box-shadow: 0 20px 50px rgba(245, 158, 11, 0.7);
+        }
+
+        .button-icon {
+          font-size: 4rem;
+          margin-bottom: 1.5rem;
+        }
+
+        .button-title {
+          font-size: 1.75rem;
+          font-weight: 700;
+          margin-bottom: 0.75rem;
+        }
+
+        .button-description {
+          font-size: 1rem;
+          opacity: 0.9;
+          line-height: 1.5;
+        }
+
+        @media (max-width: 768px) {
+          .landing-header h1 {
+            font-size: 2rem;
+          }
+
+          .landing-header p {
+            font-size: 1rem;
+          }
+
+          .button-grid {
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+          }
+
+          .landing-button {
+            padding: 2rem 1.5rem;
+          }
+
+          .button-icon {
+            font-size: 3rem;
+          }
+
+          .button-title {
+            font-size: 1.5rem;
+          }
+        }
+      `}</style>
     </main>
   )
 }

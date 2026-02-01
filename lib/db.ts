@@ -20,7 +20,7 @@ export function getPool(): Pool {
   return pool
 }
 
-// 리포트 저장 (최대 5개만 유지)
+// 리포트 저장 (최대 1000개만 유지)
 export async function saveReport(
   id: string,
   reporterName: string | null,
@@ -30,13 +30,13 @@ export async function saveReport(
 ): Promise<void> {
   const pool = getPool()
 
-  // 1. 최대 5개 유지 - 오래된 리포트부터 삭제
+  // 1. 최대 1000개 유지 - 오래된 리포트부터 삭제
   await pool.query(
     `DELETE FROM reports
      WHERE id IN (
        SELECT id FROM reports
        ORDER BY created_at DESC
-       OFFSET 4
+       OFFSET 999
      )`
   )
 
@@ -50,30 +50,48 @@ export async function saveReport(
   )
 }
 
-// 모든 리포트 목록 조회 (최신순)
-export async function getReports(): Promise<Array<{
-  id: string
-  reporterName: string | null
-  period: string
-  summary: any
-  createdAt: Date
-}>> {
+// 모든 리포트 목록 조회 (최신순, 페이징)
+export async function getReports(page: number = 1, limit: number = 100): Promise<{
+  reports: Array<{
+    id: string
+    reporterName: string | null
+    period: string
+    summary: any
+    createdAt: Date
+  }>
+  total: number
+  totalPages: number
+  currentPage: number
+}> {
   const pool = getPool()
 
+  // 전체 개수 조회
+  const countResult = await pool.query('SELECT COUNT(*) FROM reports')
+  const total = parseInt(countResult.rows[0].count)
+  const totalPages = Math.ceil(total / limit)
+  const offset = (page - 1) * limit
+
+  // 페이징된 데이터 조회
   const result = await pool.query(
     `SELECT id, reporter_name, period, summary, created_at
      FROM reports
      ORDER BY created_at DESC
-     LIMIT 5`
+     LIMIT $1 OFFSET $2`,
+    [limit, offset]
   )
 
-  return result.rows.map(row => ({
-    id: row.id,
-    reporterName: row.reporter_name,
-    period: row.period,
-    summary: row.summary,
-    createdAt: row.created_at,
-  }))
+  return {
+    reports: result.rows.map(row => ({
+      id: row.id,
+      reporterName: row.reporter_name,
+      period: row.period,
+      summary: row.summary,
+      createdAt: row.created_at,
+    })),
+    total,
+    totalPages,
+    currentPage: page,
+  }
 }
 
 // 특정 리포트 조회 (원본 데이터 포함)
