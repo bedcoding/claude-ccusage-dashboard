@@ -2,7 +2,6 @@
 
 import { useState, useMemo, Fragment, useEffect, useRef } from 'react'
 import type { TeamMemberData, TeamStats, CcusageData } from './types'
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import * as XLSX from 'xlsx'
 
 export default function Home() {
@@ -145,17 +144,8 @@ export default function Home() {
       const fileHandle = await directoryHandle.getFileHandle(fileName)
       const file = await fileHandle.getFile()
 
-      // 기존 파일 처리 로직 재사용
-      const isDuplicate = files.some(f => f.name === file.name)
-      if (isDuplicate) {
-        setMessage({ text: '이미 추가된 파일입니다.', type: 'error' })
-        setTimeout(() => setMessage(null), 3000)
-        setIsLoading(false)
-        return
-      }
-
-      setFiles(prev => [...prev, file])
-      await processFiles([...files, file])
+      setFiles([file])
+      await processFiles([file])
 
       setMessage({ text: `✅ "${fileName}" 파일을 성공적으로 불러왔습니다!`, type: 'success' })
       setTimeout(() => setMessage(null), 3000)
@@ -239,41 +229,31 @@ export default function Home() {
     e.preventDefault()
     e.currentTarget.classList.remove('drag-over')
     const droppedFiles = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/json')
-    handleFilesAdded(droppedFiles)
+    if (droppedFiles.length > 0) {
+      handleFileAdded(droppedFiles[0])
+    }
   }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const selectedFiles = Array.from(e.target.files).filter(f => f.type === 'application/json')
-      handleFilesAdded(selectedFiles)
+    if (e.target.files && e.target.files.length > 0) {
+      const file = Array.from(e.target.files).find(f => f.type === 'application/json')
+      if (file) handleFileAdded(file)
     }
   }
 
-  const handleFilesAdded = (newFiles: File[]) => {
-    const uniqueFiles = newFiles.filter(
-      newFile => !files.some(existingFile => existingFile.name === newFile.name)
-    )
-
-    if (uniqueFiles.length === 0) {
-      setMessage({ text: '이미 추가된 파일입니다.', type: 'error' })
-      setTimeout(() => setMessage(null), 3000)
-      return
-    }
-
-    setFiles(prev => [...prev, ...uniqueFiles])
-    processFiles([...files, ...uniqueFiles])
+  const handleFileAdded = (newFile: File) => {
+    setFiles([newFile])
+    processFiles([newFile])
+    setTimeout(() => {
+      statsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 300)
   }
 
-  const removeFile = (index: number) => {
-    const newFiles = files.filter((_, i) => i !== index)
-    setFiles(newFiles)
-    if (newFiles.length === 0) {
-      setTeamData([])
-      setStats(null)
-      setMergedData(null)
-    } else {
-      processFiles(newFiles)
-    }
+  const removeFile = () => {
+    setFiles([])
+    setTeamData([])
+    setStats(null)
+    setMergedData(null)
   }
 
   const processFiles = async (filesToProcess: File[]) => {
@@ -488,18 +468,11 @@ export default function Home() {
       const result = await response.json()
 
       if (result.ok) {
-        try {
-          await navigator.clipboard.writeText(result.reportsUrl)
-          setMessage({
-            text: `✅ 데이터 저장 완료!\n📥 리포트 링크가 클립보드에 복사되었습니다.\n${result.reportsUrl}`,
-            type: 'success'
-          })
-        } catch {
-          setMessage({
-            text: `✅ 데이터 저장 완료!\n📥 리포트 링크: ${result.reportsUrl}`,
-            type: 'success'
-          })
-        }
+        await navigator.clipboard.writeText(result.reportsUrl).catch(() => {})
+        setMessage({
+          text: `✅ 데이터 저장 확인: ${result.reportsUrl}`,
+          type: 'success'
+        })
       } else {
         setMessage({ text: `저장 실패: ${result.error}`, type: 'error' })
       }
@@ -644,8 +617,8 @@ export default function Home() {
 
       <div className="container">
         <header className="header">
-          <h1>🚀 Claude Max 팀 사용량 대시보드</h1>
-          <p>팀원들의 Claude Max 사용량을 한눈에 확인하세요</p>
+          <h1>🚀 Claude Max 사용량 전송</h1>
+          <p>내 Claude Max 사용량을 수동으로 업로드하려는 페이지입니다.</p>
         </header>
 
         <div className="command-section">
@@ -729,12 +702,11 @@ export default function Home() {
           >
             <div className="upload-icon">📁</div>
             <div className="upload-text">JSON 파일을 드래그하거나 클릭하여 업로드</div>
-            <div className="upload-hint">ccusage로 추출한 JSON 파일을 업로드하세요 (여러 개 가능)</div>
+            <div className="upload-hint">ccusage로 추출한 JSON 파일을 업로드하세요</div>
             <input
               id="fileInput"
               type="file"
               accept=".json"
-              multiple
               onChange={handleFileInput}
               style={{ display: 'none' }}
             />
@@ -747,7 +719,7 @@ export default function Home() {
                   <span className="file-name">📄 {file.name}</span>
                   <button className="file-remove" onClick={(e) => {
                     e.stopPropagation()
-                    removeFile(index)
+                    removeFile()
                   }}>×</button>
                 </div>
               ))}
@@ -759,11 +731,6 @@ export default function Home() {
           <>
             <div className="stats-grid" ref={statsRef}>
               <div className="stat-card">
-                <div className="stat-label">파일 개수</div>
-                <div className="stat-value">{stats.totalMembers}</div>
-                <div className="stat-subtext">개</div>
-              </div>
-              <div className="stat-card">
                 <div className="stat-label">총 비용</div>
                 <div className="stat-value">${stats.totalCost.toFixed(2)}</div>
                 <div className="stat-subtext">USD</div>
@@ -772,11 +739,6 @@ export default function Home() {
                 <div className="stat-label">총 토큰</div>
                 <div className="stat-value">{(stats.totalTokens / 1000000).toFixed(1)}M</div>
                 <div className="stat-subtext">tokens</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-label">파일당 평균 비용</div>
-                <div className="stat-value">${stats.avgCostPerMember.toFixed(2)}</div>
-                <div className="stat-subtext">USD</div>
               </div>
             </div>
 
@@ -797,7 +759,7 @@ export default function Home() {
                         cursor: isSaving ? 'not-allowed' : 'pointer'
                       }}
                     >
-                      {isSaving ? '⏳ 저장 중...' : '💾 데이터 저장하기'}
+                      {isSaving ? '⏳ 저장 중...' : '💾 데이터 DB 전송'}
                     </button>
                   </div>
                 </div>
@@ -858,174 +820,7 @@ export default function Home() {
               </div>
             )}
 
-            <div className="table-card">
-              <div className="table-header">
-                <div className="chart-title">상세 사용 내역 (파일별)</div>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button className="excel-button" onClick={exportToExcel}>
-                    📊 엑셀 다운로드
-                  </button>
-                  <button
-                    className="excel-button"
-                    onClick={saveToDatabase}
-                    disabled={isSaving}
-                    style={{
-                      background: isSaving ? '#94a3b8' : '#10b981',
-                      cursor: isSaving ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    {isSaving ? '⏳ 저장 중...' : '💾 데이터 저장하기'}
-                  </button>
-                </div>
-              </div>
-              <div className="table-scroll">
-                <table className="detail-table">
-                  <thead>
-                    <tr>
-                      <th>파일명</th>
-                      <th>date</th>
-                      <th>inputTokens</th>
-                      <th>outputTokens</th>
-                      <th>cacheCreationTokens</th>
-                      <th>cacheReadTokens</th>
-                      <th>totalTokens</th>
-                      <th>totalCost</th>
-                      <th>modelsUsed</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {teamData.map((member, memberIdx) => (
-                      <Fragment key={memberIdx}>
-                        {member.data.daily.map((day, dayIdx) => (
-                          <Fragment key={`${memberIdx}-${dayIdx}`}>
-                            <tr key={`${memberIdx}-${dayIdx}`} className="week-row">
-                              <td><strong>{member.name}</strong></td>
-                              <td>{day.date}</td>
-                              <td>{day.inputTokens.toLocaleString()}</td>
-                              <td>{day.outputTokens.toLocaleString()}</td>
-                              <td>{day.cacheCreationTokens.toLocaleString()}</td>
-                              <td>{day.cacheReadTokens.toLocaleString()}</td>
-                              <td>{day.totalTokens.toLocaleString()}</td>
-                              <td><strong>${day.totalCost.toFixed(2)}</strong></td>
-                              <td>{day.modelsUsed.join(', ')}</td>
-                            </tr>
-                            {day.modelBreakdowns.map((model, modelIdx) => (
-                              <tr key={`${memberIdx}-${dayIdx}-${modelIdx}`} className="model-row">
-                                <td></td>
-                                <td></td>
-                                <td>{model.inputTokens.toLocaleString()}</td>
-                                <td>{model.outputTokens.toLocaleString()}</td>
-                                <td>{model.cacheCreationTokens.toLocaleString()}</td>
-                                <td>{model.cacheReadTokens.toLocaleString()}</td>
-                                <td>{(model.inputTokens + model.outputTokens + model.cacheCreationTokens + model.cacheReadTokens).toLocaleString()}</td>
-                                <td>${model.cost.toFixed(2)}</td>
-                                <td className="model-name">└ {model.modelName}</td>
-                              </tr>
-                            ))}
-                          </Fragment>
-                        ))}
-                        <tr className="total-row">
-                          <td><strong>{member.name} 총계</strong></td>
-                          <td></td>
-                          <td>{member.data.totals.inputTokens.toLocaleString()}</td>
-                          <td>{member.data.totals.outputTokens.toLocaleString()}</td>
-                          <td>{member.data.totals.cacheCreationTokens.toLocaleString()}</td>
-                          <td>{member.data.totals.cacheReadTokens.toLocaleString()}</td>
-                          <td>{member.data.totals.totalTokens.toLocaleString()}</td>
-                          <td><strong>${member.data.totals.totalCost.toFixed(2)}</strong></td>
-                          <td></td>
-                        </tr>
-                        {memberIdx < teamData.length - 1 && (
-                          <tr className="separator-row">
-                            <td colSpan={9}></td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
 
-            <div className="chart-card">
-              <div className="chart-title">totalCost</div>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={stats.members}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip
-                    formatter={(value) => [`$${Number(value).toFixed(2)}`, 'totalCost']}
-                  />
-                  <Legend />
-                  <Bar dataKey="cost" fill="#3b82f6" name="totalCost" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="chart-card">
-              <div className="chart-title">totalTokens</div>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={stats.members}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`} />
-                  <Tooltip
-                    formatter={(value) => [`${(Number(value) / 1000000).toFixed(2)}M`, 'totalTokens']}
-                  />
-                  <Legend />
-                  <Bar dataKey="tokens" fill="#10b981" name="totalTokens" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {stats.weeklyTrends.length > 0 && (
-              <div className="chart-card">
-                <div className="chart-title">일별 totalCost 추이</div>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={stats.weeklyTrends}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="week" />
-                    <YAxis />
-                    <Tooltip
-                      formatter={(value) => [`$${Number(value).toFixed(2)}`, 'totalCost']}
-                    />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="totalCost"
-                      stroke="#3b82f6"
-                      name="totalCost"
-                      strokeWidth={2}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            <div className="table-card">
-              <div className="chart-title">요약 통계</div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>파일명</th>
-                    <th>totalCost</th>
-                    <th>totalTokens</th>
-                    <th>percentage</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.members.map((member, index) => (
-                    <tr key={index}>
-                      <td><strong>{member.name}</strong></td>
-                      <td>${member.cost.toFixed(2)}</td>
-                      <td>{(member.tokens / 1000000).toFixed(2)}M</td>
-                      <td>{member.percentage.toFixed(1)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           </>
         )}
       </div>
