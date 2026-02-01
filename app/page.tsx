@@ -50,13 +50,6 @@ export default function Home() {
           if (permission === 'granted') {
             setDirectoryHandle(handle)
             setSelectedFolder(handle.name)
-            return
-          }
-          // @ts-ignore - File System Access API
-          const requestPermission = await handle.requestPermission({ mode: 'read' })
-          if (requestPermission === 'granted') {
-            setDirectoryHandle(handle)
-            setSelectedFolder(handle.name)
           }
         }
       }
@@ -148,6 +141,25 @@ export default function Home() {
 
     if (!userName) {
       setMessage({ text: '먼저 이름을 입력해주세요.', type: 'error' })
+      setTimeout(() => setMessage(null), 3000)
+      return
+    }
+
+    // 권한 확인 및 요청 (사용자 제스처 컨텍스트에서 실행)
+    try {
+      // @ts-ignore - File System Access API
+      const permission = await directoryHandle.queryPermission({ mode: 'read' })
+      if (permission !== 'granted') {
+        // @ts-ignore - File System Access API
+        const requestPermission = await directoryHandle.requestPermission({ mode: 'read' })
+        if (requestPermission !== 'granted') {
+          setMessage({ text: '폴더 접근 권한이 필요합니다.', type: 'error' })
+          setTimeout(() => setMessage(null), 3000)
+          return
+        }
+      }
+    } catch (error) {
+      setMessage({ text: '권한 요청 실패. 폴더를 다시 선택해주세요.', type: 'error' })
       setTimeout(() => setMessage(null), 3000)
       return
     }
