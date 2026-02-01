@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 
 export default function GuidePage() {
   const [userName, setUserName] = useState('안성민')
@@ -110,21 +109,11 @@ fi
   }
 
   return (
-    <main style={{ minHeight: '100vh', background: '#f8fafc', padding: '2rem' }}>
+    <main>
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-        <div style={{ marginBottom: '2rem' }}>
-          <Link href="/" style={{ color: '#3b82f6', textDecoration: 'none', fontSize: '0.875rem' }}>
-            ← 홈으로 돌아가기
-          </Link>
-        </div>
-
-        <header style={{ marginBottom: '3rem' }}>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: '700', color: '#1e293b', marginBottom: '0.5rem' }}>
-            ⚡ 자동화 가이드
-          </h1>
-          <p style={{ fontSize: '1.125rem', color: '#64748b' }}>
-            매주 월요일마다 자동으로 ccusage 데이터를 수집하고 DB에 저장하는 방법
-          </p>
+        <header className="header">
+          <h1>⚡ 자동화 가이드</h1>
+          <p>매주 월요일마다 자동으로 ccusage 데이터를 수집하고 DB에 저장하는 방법</p>
         </header>
 
         {/* 설정 섹션 */}
@@ -555,22 +544,6 @@ fi
           </div>
         </div>
 
-        <div style={{ textAlign: 'center', padding: '2rem' }}>
-          <Link
-            href="/"
-            style={{
-              display: 'inline-block',
-              padding: '1rem 2rem',
-              background: '#3b82f6',
-              color: 'white',
-              textDecoration: 'none',
-              borderRadius: '8px',
-              fontWeight: '600'
-            }}
-          >
-            홈으로 돌아가기
-          </Link>
-        </div>
       </div>
     </main>
   )

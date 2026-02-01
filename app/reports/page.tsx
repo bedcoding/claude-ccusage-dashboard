@@ -83,10 +83,16 @@ export default function ReportsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">리포트를 불러오는 중...</p>
+      <div className="min-h-screen bg-gray-50 py-12 px-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                <p className="mt-4 text-gray-600">리포트를 불러오는 중...</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -120,13 +126,11 @@ export default function ReportsPage() {
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-6xl mx-auto">
         {/* 헤더 */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <header className="header">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-800 mb-2">
-                📊 Claude Max 팀 사용량 리포트
-              </h1>
-              <p className="text-gray-500">
+              <h1>📊 Claude Max 팀 사용량 리포트</h1>
+              <p>
                 전체 {total}개 중 {reports.length}개 표시 (페이지 {currentPage}/{totalPages})
               </p>
             </div>
@@ -161,7 +165,7 @@ export default function ReportsPage() {
               </div>
             </div>
           )}
-        </div>
+        </header>
 
         {/* 리포트 목록 */}
         <div className="space-y-4">
