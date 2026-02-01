@@ -116,11 +116,7 @@ export default function Home() {
       return
     }
 
-    if (!userName) {
-      setMessage({ text: '먼저 이름을 입력해주세요.', type: 'error' })
-      setTimeout(() => setMessage(null), 3000)
-      return
-    }
+    const targetName = userName || '이름'
 
     // 권한 확인 및 요청 (사용자 제스처 컨텍스트에서 실행)
     try {
@@ -145,7 +141,7 @@ export default function Home() {
     setMessage({ text: '파일을 불러오는 중...', type: 'success' })
 
     try {
-      const fileName = `${userName}.json`
+      const fileName = `${targetName}.json`
       const fileHandle = await directoryHandle.getFileHandle(fileName)
       const file = await fileHandle.getFile()
 
@@ -169,7 +165,7 @@ export default function Home() {
         statsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 300)
     } catch (error) {
-      setMessage({ text: `"${userName}.json" 파일을 찾을 수 없습니다. 먼저 터미널에서 명령어를 실행해주세요.`, type: 'error' })
+      setMessage({ text: `"${targetName}.json" 파일을 찾을 수 없습니다. 먼저 터미널에서 명령어를 실행해주세요.`, type: 'error' })
       setTimeout(() => setMessage(null), 5000)
     } finally {
       setIsLoading(false)
@@ -716,7 +712,7 @@ export default function Home() {
             <button
               className="auto-load-button"
               onClick={loadFileFromFolder}
-              disabled={!directoryHandle || !userName || isLoading}
+              disabled={!directoryHandle || isLoading}
             >
               {isLoading ? '⏳ 불러오는 중...' : `⚡ ${userName || '이름'}.json 자동 불러오기`}
             </button>

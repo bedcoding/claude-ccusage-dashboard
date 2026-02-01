@@ -119,7 +119,7 @@ fi
         {/* 설정 섹션 */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem', color: '#1e293b' }}>
-            1️⃣ 설정
+            2️⃣ 설정
           </h2>
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', fontWeight: '500', marginBottom: '0.5rem', color: '#475569' }}>
@@ -196,10 +196,45 @@ fi
           </div>
         </div>
 
+        {/* Step 0 - 사전 준비 */}
+        <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem', color: '#1e293b' }}>
+            1️⃣ 사전 준비
+          </h2>
+          <p style={{ color: '#64748b', marginBottom: '1rem' }}>ccusage가 설치되어 있지 않다면 먼저 설치해주세요.</p>
+          <div style={{
+            background: '#1e293b',
+            color: '#e2e8f0',
+            padding: '1.5rem',
+            borderRadius: '8px',
+            fontFamily: 'monospace',
+            position: 'relative'
+          }}>
+            <code>npm install -g ccusage</code>
+            <button
+              onClick={() => copyToClipboard('npm install -g ccusage', 'ccusage-install')}
+              style={{
+                position: 'absolute',
+                top: '1rem',
+                right: '1rem',
+                padding: '0.5rem 1rem',
+                background: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.875rem'
+              }}
+            >
+              {copied === 'ccusage-install' ? '✓ 복사됨!' : '📋 복사'}
+            </button>
+          </div>
+        </div>
+
         {/* Step 1 */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem', color: '#1e293b' }}>
-            2️⃣ 폴더 생성
+            3️⃣ 폴더 생성
           </h2>
           <div style={{
             background: '#1e293b',
@@ -233,7 +268,7 @@ fi
         {/* Step 2 */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem', color: '#1e293b' }}>
-            3️⃣ 스크립트 파일 생성
+            4️⃣ 스크립트 파일 생성
           </h2>
           <p style={{ marginBottom: '1rem', color: '#475569' }}>
             다음 명령어로 스크립트 파일을 생성하세요:
@@ -308,7 +343,7 @@ fi
         {/* Step 3 */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem', color: '#1e293b' }}>
-            4️⃣ 실행 권한 부여
+            5️⃣ 실행 권한 부여
           </h2>
           <div style={{
             background: '#1e293b',
@@ -342,7 +377,7 @@ fi
         {/* Step 4 */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem', color: '#1e293b' }}>
-            5️⃣ 수동 테스트
+            6️⃣ 수동 테스트
           </h2>
           <p style={{ marginBottom: '1rem', color: '#475569' }}>
             crontab 설정 전에 스크립트가 제대로 작동하는지 확인하세요:
@@ -388,7 +423,7 @@ fi
         {/* Step 5 */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem', color: '#1e293b' }}>
-            6️⃣ crontab 설정
+            7️⃣ crontab 설정
           </h2>
           <p style={{ marginBottom: '1rem', color: '#475569' }}>
             crontab 편집기 열기:
@@ -449,7 +484,7 @@ fi
         {/* Step 6 */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem', color: '#1e293b' }}>
-            7️⃣ crontab 확인
+            8️⃣ crontab 확인
           </h2>
           <p style={{ marginBottom: '1rem', color: '#475569' }}>
             설정된 crontab 목록 확인:
