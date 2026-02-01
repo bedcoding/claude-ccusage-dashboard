@@ -130,9 +130,11 @@ export default function ReportsPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1>📊 Claude Max 팀 사용량 리포트</h1>
-              <p>
-                전체 {total}개 중 {reports.length}개 표시 (페이지 {currentPage}/{totalPages})
-              </p>
+              {totalPages > 1 && (
+                <p>
+                  전체 {total}개 중 {reports.length}개 표시 (페이지 {currentPage}/{totalPages})
+                </p>
+              )}
             </div>
             <button
               onClick={handleDownloadExcel}
@@ -143,14 +145,16 @@ export default function ReportsPage() {
                   : 'bg-blue-500 hover:bg-blue-600 text-white'
               }`}
             >
-              📥 엑셀 다운로드 ({selectedIds.length}개 선택)
+              📥 엑셀 다운로드
             </button>
           </div>
 
           {/* 선택된 리포트 통계 */}
-          {selectedIds.length > 0 && (
             <div className="mt-4 pt-4 border-t">
-              <p className="text-sm font-bold text-gray-700 mb-2">선택된 리포트 합계</p>
+              <p className="text-sm font-bold text-gray-700 mb-2">
+                <span className="inline-block bg-gray-200 text-gray-600 text-xs font-semibold px-2 py-0.5 rounded mr-2">{selectedIds.length}개 선택</span>
+                선택된 리포트 합계
+              </p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-blue-50 rounded-lg p-3">
                   <div className="text-xs text-gray-600 mb-1">총 비용</div>
@@ -164,7 +168,6 @@ export default function ReportsPage() {
                 </div>
               </div>
             </div>
-          )}
         </header>
 
         {/* 리포트 목록 */}

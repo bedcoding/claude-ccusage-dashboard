@@ -618,7 +618,7 @@ export default function Home() {
       <div className="container">
         <header className="header">
           <h1>🚀 Claude Max 사용량 전송</h1>
-          <p>내 Claude Max 사용량을 수동으로 업로드하려는 페이지입니다.</p>
+          <p>내 Claude Max 사용량을 수동으로 업로드하는 페이지입니다.</p>
         </header>
 
         <div className="command-section">

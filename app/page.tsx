@@ -21,7 +21,7 @@ export default function Home() {
             <div className="button-icon">💾</div>
             <div className="button-title">사용량 전송</div>
             <div className="button-description">
-              Claude 사용량 데이터를 수동으로 저장합니다
+              Claude 사용량 데이터를 수동으로 저장합니다.
             </div>
           </button>
 
@@ -32,7 +32,7 @@ export default function Home() {
             <div className="button-icon">📊</div>
             <div className="button-title">사용량 조회</div>
             <div className="button-description">
-              저장된 리포트를 조회하고 확인합니다
+              저장된 리포트를 조회하고 확인합니다.
             </div>
           </button>
 
@@ -43,7 +43,7 @@ export default function Home() {
             <div className="button-icon">⚡</div>
             <div className="button-title">자동화 가이드</div>
             <div className="button-description">
-              Claude 사용량 데이터를 맥북 CronTab을 사용해서 자동으로 DB에 저장하는 방법을 가이드합니다.
+              Claude 사용량 데이터를 맥북 CronTab을 써서 자동으로 DB에 저장하는 방법을 가이드합니다.
             </div>
           </button>
 
@@ -54,7 +54,7 @@ export default function Home() {
             <div className="button-icon">💬</div>
             <div className="button-title">슬랙 전송</div>
             <div className="button-description">
-              슬랙 연동 설정 및 리포트 링크를 전송합니다
+              슬랙 연동 설정 및 리포트 링크를 전송합니다.
             </div>
           </button>
         </div>

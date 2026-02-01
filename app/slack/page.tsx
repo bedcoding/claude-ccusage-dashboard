@@ -118,7 +118,7 @@ export default function SlackPage() {
       <div className="container">
         <header className="header">
           <h1>💬 슬랙 전송</h1>
-          <p>슬랙 연동 설정 및 리포트 링크를 전송합니다</p>
+          <p>슬랙 연동 설정 및 리포트 링크를 전송합니다.</p>
         </header>
 
         <div className="slack-settings-section">
