@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { saveReport } from '@/lib/db'
+import { REPORTS_URL } from '@/lib/constants'
 import type { CcusageData } from '@/app/types'
 
 export async function POST(request: NextRequest) {
@@ -66,8 +67,7 @@ export async function POST(request: NextRequest) {
 
     await saveReport(reportId, userName, period, rawData, summary)
 
-    // 리포트 URL
-    const reportsUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/reports`
+    const reportsUrl = REPORTS_URL
 
     return NextResponse.json({
       ok: true,

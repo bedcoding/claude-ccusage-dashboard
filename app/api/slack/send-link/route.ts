@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { REPORTS_URL } from '@/lib/constants'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { slackToken, channelId } = body
+    const { slackToken, channelId, customMessage } = body
 
     if (!slackToken || !channelId) {
       return NextResponse.json(
@@ -12,15 +13,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 고정 URL
-    const reportsUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/reports`
+    const reportsUrl = REPORTS_URL
 
-    // 간단한 알림 메시지
-    const message = `📊 *Claude Max 팀 사용량 리포트*
-
-📥 *리포트 확인하기:* ${reportsUrl}
-
-_최근 5개의 리포트를 확인할 수 있습니다._`
+    const message = customMessage || `📊 Claude Max 팀 사용량 리포트가 작성되었습니다.\n📥 리포트 확인하기: ${reportsUrl}`
 
     // Slack 메시지 전송
     const response = await fetch('https://slack.com/api/chat.postMessage', {

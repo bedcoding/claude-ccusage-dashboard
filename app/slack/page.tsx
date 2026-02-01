@@ -1,12 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { REPORTS_URL } from '@/lib/constants'
 
 export default function SlackPage() {
   const [slackBotToken, setSlackBotToken] = useState('')
   const [slackChannelId, setSlackChannelId] = useState('')
   const [isSendingToSlack, setIsSendingToSlack] = useState(false)
   const [message, setMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null)
+  const reportsUrl = REPORTS_URL
+  const defaultSlackMessage = `📊 Claude Max 팀 사용량 리포트가 작성되었습니다.\n📥 리포트 확인하기: ${reportsUrl}`
+  const [slackMessage, setSlackMessage] = useState(defaultSlackMessage)
 
   useEffect(() => {
     const savedSlackToken = localStorage.getItem('slackBotToken')
@@ -80,7 +84,8 @@ export default function SlackPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           slackToken: slackBotToken,
-          channelId: slackChannelId
+          channelId: slackChannelId,
+          customMessage: slackMessage
         })
       })
 
@@ -172,8 +177,27 @@ export default function SlackPage() {
 
         <div className="slack-settings-section" style={{ marginTop: '2rem' }}>
           <div className="command-header">
-            <h2>🔗 리포트 링크 전송</h2>
-            <p>최신 리포트 링크를 슬랙 채널로 전송합니다</p>
+            <h2>🔗 슬랙 메세지 전송</h2>
+            <p>슬랙 채널로 메세지를 전송합니다</p>
+          </div>
+          <div style={{ padding: '0 1rem', marginTop: '1rem' }}>
+            <label htmlFor="slackMessage" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#334155' }}>✏️ 전송 메시지</label>
+            <textarea
+              id="slackMessage"
+              value={slackMessage}
+              onChange={(e) => setSlackMessage(e.target.value)}
+              style={{
+                width: '100%',
+                minHeight: '100px',
+                padding: '0.75rem',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0',
+                fontSize: '0.875rem',
+                fontFamily: 'inherit',
+                resize: 'vertical',
+                lineHeight: '1.6'
+              }}
+            />
           </div>
           <div style={{ textAlign: 'center', marginTop: '1rem' }}>
             <button
