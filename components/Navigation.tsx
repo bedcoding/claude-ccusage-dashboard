@@ -15,6 +15,7 @@ export default function Navigation() {
     { label: '사용량 전송', href: '/upload', icon: '💾', color: '#3b82f6' },
     { label: '사용량 조회', href: '/reports', icon: '📊', color: '#10b981' },
     { label: '자동화 가이드', href: '/guide', icon: '⚡', color: '#f59e0b' },
+    { label: '슬랙 전송', href: '/slack', icon: '💬', color: '#8b5cf6' },
   ]
 
   return (

@@ -46,6 +46,17 @@ export default function Home() {
               Claude 사용량 데이터를 맥북 CronTab을 사용해서 자동으로 DB에 저장하는 방법을 가이드합니다.
             </div>
           </button>
+
+          <button
+            onClick={() => router.push('/slack')}
+            className="landing-button slack-button"
+          >
+            <div className="button-icon">💬</div>
+            <div className="button-title">슬랙 전송</div>
+            <div className="button-description">
+              슬랙 연동 설정 및 리포트 링크를 전송합니다
+            </div>
+          </button>
         </div>
       </div>
 
@@ -131,8 +142,18 @@ export default function Home() {
           box-shadow: 0 20px 50px rgba(16, 185, 129, 0.7);
         }
 
+        .slack-button {
+          background: #8b5cf6;
+          color: white;
+          box-shadow: 0 10px 30px rgba(139, 92, 246, 0.5);
+        }
+
+        .slack-button:hover {
+          background: #7c3aed;
+          box-shadow: 0 20px 50px rgba(139, 92, 246, 0.7);
+        }
+
         .guide-button {
-          grid-column: 1 / -1;
           background: #f59e0b;
           color: white;
           box-shadow: 0 10px 30px rgba(245, 158, 11, 0.5);
