@@ -8,7 +8,7 @@ CREATE TABLE reports (
     period VARCHAR(200) NOT NULL,           -- 기간 (예: "2026-01-23 ~ 2026-01-30")
     raw_data JSONB NOT NULL,                -- 원본 데이터 (teamData, mergedData 등)
     summary JSONB,                          -- 요약 통계 (totalCost, totalTokens 등)
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 생성 시간 인덱스
