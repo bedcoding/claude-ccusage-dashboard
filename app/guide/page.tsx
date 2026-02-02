@@ -51,7 +51,7 @@ export default function GuidePage() {
 
 # 저번주 월요일~일요일 날짜 계산
 last_monday=$(date -v-1w -v-mon +%Y%m%d)
-last_sunday=$(date -v-1w -v-sun +%Y%m%d)
+last_sunday=$(date -j -v+6d -f "%Y%m%d" "$last_monday" +%Y%m%d)
 
 # 사용자 이름 설정
 USERNAME="${userName}"
