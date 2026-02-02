@@ -93,7 +93,7 @@ export default function SlackPage() {
 
       if (result.ok && result.slackSent) {
         setMessage({
-          text: `✅ 슬랙 전송 완료!\n📥 리포트 링크: ${result.reportsUrl}`,
+          text: `✅ 슬랙 전송 완료`,
           type: 'success'
         })
       } else {
