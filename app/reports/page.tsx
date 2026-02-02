@@ -43,7 +43,7 @@ export default function ReportsPage() {
     )
   }
 
-  const handleDownloadExcel = async () => {
+  const handleDownloadExcel = async (type: 'merged' | 'individual') => {
     if (selectedIds.length === 0) {
       alert('다운로드할 리포트를 선택하세요.')
       return
@@ -53,7 +53,7 @@ export default function ReportsPage() {
       const res = await fetch('/api/excel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reportIds: selectedIds })
+        body: JSON.stringify({ reportIds: selectedIds, type })
       })
 
       if (!res.ok) {
@@ -66,7 +66,8 @@ export default function ReportsPage() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `Claude_Usage_${new Date().toISOString().split('T')[0]}.xlsx`
+      const suffix = type === 'merged' ? '통합' : '사람별'
+      a.download = `Claude_Usage_${suffix}_${new Date().toISOString().split('T')[0]}.xlsx`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -130,23 +131,39 @@ export default function ReportsPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1>📊 Claude Max 팀 사용량 리포트</h1>
+              <p>원하는 리포트를 선택하여 엑셀 파일로 다운로드할 수 있습니다.</p>
               {totalPages > 1 && (
-                <p>
+                <p className="text-sm text-gray-500 mt-1">
                   전체 {total}개 중 {reports.length}개 표시 (페이지 {currentPage}/{totalPages})
                 </p>
               )}
             </div>
-            <button
-              onClick={handleDownloadExcel}
-              disabled={selectedIds.length === 0}
-              className={`font-bold py-3 px-6 rounded-lg transition-colors ${
-                selectedIds.length === 0
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-blue-500 hover:bg-blue-600 text-white'
-              }`}
-            >
-              📥 엑셀 다운로드
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleDownloadExcel('merged')}
+                disabled={selectedIds.length === 0}
+                className={`font-bold py-3 px-4 rounded-lg transition-colors ${
+                  selectedIds.length === 0
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-blue-500 hover:bg-blue-600 text-white'
+                }`}
+                title="선택한 리포트들의 데이터를 날짜별로 합산하여 다운로드"
+              >
+                📥 통합 다운로드
+              </button>
+              <button
+                onClick={() => handleDownloadExcel('individual')}
+                disabled={selectedIds.length === 0}
+                className={`font-bold py-3 px-4 rounded-lg transition-colors ${
+                  selectedIds.length === 0
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-green-500 hover:bg-green-600 text-white'
+                }`}
+                title="선택한 리포트들을 사람별로 시트를 나눠서 다운로드"
+              >
+                📊 사람별 다운로드
+              </button>
+            </div>
           </div>
 
           {/* 선택된 리포트 통계 */}
@@ -295,7 +312,11 @@ export default function ReportsPage() {
 
         {/* 안내 */}
         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
-          💡 <strong>사용 방법:</strong> 원하는 리포트를 체크박스로 선택한 후 "엑셀 다운로드" 버튼을 클릭하세요. 선택한 리포트들의 데이터가 합쳐진 엑셀 파일이 다운로드됩니다.
+          <p className="mb-2">💡 <strong>사용 방법:</strong> 원하는 리포트를 체크박스로 선택한 후 다운로드 버튼을 클릭하세요.</p>
+          <ul className="ml-4 space-y-1">
+            <li>• <strong>통합 다운로드:</strong> 선택한 리포트들의 데이터를 날짜별로 합산하여 하나의 시트로 다운로드</li>
+            <li>• <strong>사람별 다운로드:</strong> 선택한 리포트별로 각각 시트를 나눠서 다운로드</li>
+          </ul>
         </div>
       </div>
     </div>

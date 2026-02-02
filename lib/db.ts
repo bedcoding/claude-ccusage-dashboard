@@ -128,6 +128,7 @@ export async function getReport(id: string): Promise<{
 // 여러 리포트 조회 (원본 데이터 포함)
 export async function getReportsByIds(ids: string[]): Promise<Array<{
   id: string
+  reporterName: string | null
   period: string
   rawData: any
   summary: any
@@ -136,7 +137,7 @@ export async function getReportsByIds(ids: string[]): Promise<Array<{
   const pool = getPool()
 
   const result = await pool.query(
-    `SELECT id, period, raw_data, summary, created_at
+    `SELECT id, reporter_name, period, raw_data, summary, created_at
      FROM reports
      WHERE id = ANY($1)
      ORDER BY created_at DESC`,
@@ -145,6 +146,7 @@ export async function getReportsByIds(ids: string[]): Promise<Array<{
 
   return result.rows.map(row => ({
     id: row.id,
+    reporterName: row.reporter_name,
     period: row.period,
     rawData: row.raw_data,
     summary: row.summary,
