@@ -43,9 +43,9 @@ export async function saveReport(
   // 2. 새 리포트 저장
   await pool.query(
     `INSERT INTO reports (id, reporter_name, period, raw_data, summary, created_at)
-     VALUES ($1, $2, $3, $4, $5, NOW() AT TIME ZONE 'Asia/Seoul')
+     VALUES ($1, $2, $3, $4, $5, NOW())
      ON CONFLICT (id) DO UPDATE
-     SET reporter_name = $2, period = $3, raw_data = $4, summary = $5, created_at = NOW() AT TIME ZONE 'Asia/Seoul'`,
+     SET reporter_name = $2, period = $3, raw_data = $4, summary = $5, created_at = NOW()`,
     [id, reporterName, period, JSON.stringify(rawData), JSON.stringify(summary)]
   )
 }
