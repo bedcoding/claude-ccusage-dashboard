@@ -9,7 +9,7 @@ export default function SlackPage() {
   const [isSendingToSlack, setIsSendingToSlack] = useState(false)
   const [message, setMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null)
   const reportsUrl = REPORTS_URL
-  const defaultSlackMessage = `📊 Claude Max 팀 사용량 리포트가 작성되었습니다.\n📥 리포트 확인하기: ${reportsUrl}`
+  const defaultSlackMessage = `📊 Claude Max 사용량 데이터가 추가되었습니다.\n📥 ${reportsUrl}`
   const [slackMessage, setSlackMessage] = useState(defaultSlackMessage)
 
   useEffect(() => {
