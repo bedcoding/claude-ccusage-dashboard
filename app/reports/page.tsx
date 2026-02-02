@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import StatsDashboard from '@/components/StatsDashboard'
 
 export default function ReportsPage() {
   const [loading, setLoading] = useState(true)
@@ -10,6 +11,7 @@ export default function ReportsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
+  const [statsExpanded, setStatsExpanded] = useState(false)
   const limit = 100
 
   useEffect(() => {
@@ -169,7 +171,6 @@ export default function ReportsPage() {
           {/* 선택된 리포트 통계 */}
             <div className="mt-4 pt-4 border-t">
               <p className="text-sm font-bold text-gray-700 mb-2">
-                <span className="inline-block bg-gray-200 text-gray-600 text-xs font-semibold px-2 py-0.5 rounded mr-2">{selectedIds.length}개 선택</span>
                 선택된 리포트 합계
               </p>
               <div className="grid grid-cols-2 gap-3">
@@ -186,6 +187,13 @@ export default function ReportsPage() {
               </div>
             </div>
         </header>
+
+        {/* 통계 대시보드 */}
+        <StatsDashboard
+          selectedIds={selectedIds}
+          isExpanded={statsExpanded}
+          onToggle={() => setStatsExpanded(!statsExpanded)}
+        />
 
         {/* 리포트 목록 */}
         <div className="space-y-4">
