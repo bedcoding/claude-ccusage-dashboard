@@ -3,6 +3,7 @@
 import { useState, useMemo, Fragment, useEffect, useRef } from 'react'
 import type { TeamMemberData, TeamStats, CcusageData } from './types'
 import * as XLSX from 'xlsx'
+import { validateCcusageData } from '@/lib/validation'
 
 export default function Home() {
   const [files, setFiles] = useState<File[]>([])
@@ -262,7 +263,22 @@ export default function Home() {
 
       for (const file of filesToProcess) {
         const text = await file.text()
-        const data: CcusageData = JSON.parse(text)
+
+        // JSON 파싱
+        let jsonData: unknown
+        try {
+          jsonData = JSON.parse(text)
+        } catch {
+          throw new Error(`${file.name}: 올바른 JSON 형식이 아닙니다.`)
+        }
+
+        // Zod 스키마로 데이터 검증
+        const validation = validateCcusageData(jsonData)
+        if (!validation.success) {
+          throw new Error(`${file.name}: ${validation.error}`)
+        }
+
+        const data: CcusageData = validation.data
 
         // 파일명에서 확장자 제거하여 이름 추출
         const name = file.name.replace('.json', '')
@@ -624,7 +640,6 @@ export default function Home() {
         <div className="command-section">
           <div className="command-header">
             <h2>📋 이번 주 데이터 수집 명령어</h2>
-            <p className="command-period">사전 준비: <code>npm install -g ccusage</code></p>
           </div>
           <div className="input-row">
             <div className="name-input-container">

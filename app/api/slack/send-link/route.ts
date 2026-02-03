@@ -1,7 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { REPORTS_URL } from '@/lib/constants'
+import { checkRateLimit, getClientIP, createRateLimitResponse } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
+  // Rate limiting - 링크 전송은 분당 3회로 제한
+  const clientIP = getClientIP(request)
+  const rateLimit = checkRateLimit(`slack-link:${clientIP}`, {
+    windowMs: 60 * 1000,
+    maxRequests: 3
+  })
+
+  if (!rateLimit.allowed) {
+    return createRateLimitResponse(rateLimit.resetTime)
+  }
+
   try {
     const body = await request.json()
     const { slackToken, channelId, customMessage } = body

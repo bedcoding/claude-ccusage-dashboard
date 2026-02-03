@@ -201,7 +201,7 @@ fi
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem', color: '#1e293b' }}>
             2️⃣ 사전 준비
           </h2>
-          <p style={{ color: '#64748b', marginBottom: '1rem' }}>ccusage가 설치되어 있지 않다면 먼저 설치해주세요.</p>
+          <p style={{ color: '#64748b', marginBottom: '1rem' }}>아래 명령어로 ccusage가 정상 동작하는지 확인해보세요.</p>
           <div style={{
             background: '#1e293b',
             color: '#e2e8f0',
@@ -210,9 +210,9 @@ fi
             fontFamily: 'monospace',
             position: 'relative'
           }}>
-            <code>npm install -g ccusage</code>
+            <code>npx ccusage</code>
             <button
-              onClick={() => copyToClipboard('npm install -g ccusage', 'ccusage-install')}
+              onClick={() => copyToClipboard('npx ccusage', 'ccusage-npx')}
               style={{
                 position: 'absolute',
                 top: '1rem',
@@ -226,7 +226,7 @@ fi
                 fontSize: '0.875rem'
               }}
             >
-              {copied === 'ccusage-install' ? '✓ 복사됨!' : '📋 복사'}
+              {copied === 'ccusage-npx' ? '✓ 복사됨!' : '📋 복사'}
             </button>
           </div>
         </div>
