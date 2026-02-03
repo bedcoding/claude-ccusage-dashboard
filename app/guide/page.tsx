@@ -74,16 +74,19 @@ output_file="${folderPath}/\${USERNAME}\${month_day_start}-\${month_day_end}.jso
 
 # 이미 파일이 있으면 스킵 (이번 주에 이미 처리됨)
 if [ -f "\$output_file" ]; then
+  echo "스킵: 이미 존재 (\$last_monday ~ \$last_sunday)"
   echo "[\$(date)] 스킵: 이미 존재 (\$last_monday ~ \$last_sunday)" >> ${folderPath}/ccusage-cron.log
   exit 0
 fi
 
 # ccusage 실행
+echo "ccusage 실행 중... (\$last_monday ~ \$last_sunday)"
 cd ${folderPath}
 npx ccusage daily --json --since $last_monday --until $last_sunday > "\$output_file"
 
 # ccusage 실행 결과 확인
 if [ ! -f "\$output_file" ] || [ ! -s "\$output_file" ]; then
+  echo "❌ 오류: JSON 파일 생성 실패"
   echo "[\$(date)] 오류: JSON 파일 생성 실패" >> ${folderPath}/ccusage-cron.log
   exit 1
 fi
@@ -92,6 +95,7 @@ fi
 json_data=\$(cat "\$output_file")
 
 # API로 데이터 전송
+echo "API 전송 중..."
 response=\$(curl -s -X POST "\$API_URL/api/reports/save-raw" \\
   -H "Content-Type: application/json" \\
   -d "{
@@ -104,8 +108,10 @@ response=\$(curl -s -X POST "\$API_URL/api/reports/save-raw" \\
 
 # API 응답 확인
 if echo "\$response" | grep -q '"ok":true'; then
+  echo "✅ DB 저장 완료: \$USERNAME (\$last_monday ~ \$last_sunday)"
   echo "[\$(date)] ✅ DB 저장 완료: \$USERNAME (\$last_monday ~ \$last_sunday)" >> ${folderPath}/ccusage-cron.log
 else
+  echo "❌ DB 저장 실패: \$response"
   echo "[\$(date)] ❌ DB 저장 실패: \$response" >> ${folderPath}/ccusage-cron.log
 fi
 `
