@@ -14,7 +14,7 @@ export default function ReportsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
-  const [statsExpanded, setStatsExpanded] = useState(false)
+  const [statsModalOpen, setStatsModalOpen] = useState(false)
   const limit = 100
 
   // 정렬 및 필터 상태
@@ -246,6 +246,18 @@ export default function ReportsPage() {
               >
                 📊 사람별 다운로드
               </button>
+              <button
+                onClick={() => setStatsModalOpen(true)}
+                disabled={selectedIds.length === 0}
+                className={`font-bold py-3 px-4 rounded-lg transition-colors ${
+                  selectedIds.length === 0
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-purple-500 hover:bg-purple-600 text-white'
+                }`}
+                title="선택한 리포트들의 통계를 차트로 확인"
+              >
+                📈 통계 보기
+              </button>
             </div>
           </div>
 
@@ -268,28 +280,6 @@ export default function ReportsPage() {
               </div>
             </div>
         </header>
-
-        {/* 통계 대시보드 */}
-        <StatsDashboard
-          selectedIds={selectedIds}
-          isExpanded={statsExpanded}
-          onToggle={() => setStatsExpanded(!statsExpanded)}
-        />
-
-        {/* 스크롤 화살표 */}
-        <div className="flex justify-center mb-6">
-          <button
-            onClick={() => {
-              document.getElementById('report-list')?.scrollIntoView({ behavior: 'smooth' })
-            }}
-            className="text-gray-400 hover:text-gray-600 transition-colors animate-bounce"
-            title="리포트 목록으로 이동"
-          >
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-            </svg>
-          </button>
-        </div>
 
         {/* 필터 및 정렬 */}
         <div id="report-list" className="bg-white rounded-lg shadow-md p-4 mb-4">
@@ -518,9 +508,17 @@ export default function ReportsPage() {
           <ul className="ml-4 space-y-1">
             <li>• <strong>통합 다운로드:</strong> 선택한 리포트들의 데이터를 날짜별로 합산하여 하나의 시트로 다운로드</li>
             <li>• <strong>사람별 다운로드:</strong> 선택한 리포트별로 각각 시트를 나눠서 다운로드</li>
+            <li>• <strong>통계 보기:</strong> 선택한 리포트들의 비용/토큰 사용량을 차트로 확인</li>
           </ul>
         </div>
       </div>
+
+      {/* 통계 모달 */}
+      <StatsDashboard
+        selectedIds={selectedIds}
+        isOpen={statsModalOpen}
+        onClose={() => setStatsModalOpen(false)}
+      />
     </div>
   )
 }

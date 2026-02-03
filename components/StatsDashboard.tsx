@@ -8,8 +8,8 @@ import {
 
 interface StatsDashboardProps {
   selectedIds: string[]
-  isExpanded: boolean
-  onToggle: () => void
+  isOpen: boolean
+  onClose: () => void
 }
 
 interface StatsData {
@@ -38,16 +38,31 @@ interface StatsData {
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16']
 
-export default function StatsDashboard({ selectedIds, isExpanded, onToggle }: StatsDashboardProps) {
+export default function StatsDashboard({ selectedIds, isOpen, onClose }: StatsDashboardProps) {
   const [loading, setLoading] = useState(false)
   const [stats, setStats] = useState<StatsData | null>(null)
   const [activeTab, setActiveTab] = useState<'daily' | 'users' | 'models'>('daily')
 
   useEffect(() => {
-    if (isExpanded && selectedIds.length > 0) {
+    if (isOpen && selectedIds.length > 0) {
       fetchStats()
     }
-  }, [selectedIds, isExpanded])
+  }, [selectedIds, isOpen])
+
+  // ESC 키로 모달 닫기
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    if (isOpen) {
+      document.addEventListener('keydown', handleEsc)
+      document.body.style.overflow = 'hidden'
+    }
+    return () => {
+      document.removeEventListener('keydown', handleEsc)
+      document.body.style.overflow = 'unset'
+    }
+  }, [isOpen, onClose])
 
   const fetchStats = async () => {
     setLoading(true)
@@ -71,43 +86,47 @@ export default function StatsDashboard({ selectedIds, isExpanded, onToggle }: St
   const formatCost = (value: number) => `$${value.toFixed(2)}`
   const formatTokens = (value: number) => `${(value / 1000000).toFixed(2)}M`
 
-  return (
-    <div className="bg-white rounded-lg shadow-md mb-8 overflow-hidden">
-      {/* 토글 헤더 */}
-      <button
-        onClick={onToggle}
-        className="w-full px-5 py-3 flex items-center justify-between bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 transition-all"
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-xl">📈</span>
-          <span className="font-bold">통계 대시보드</span>
-          {selectedIds.length > 0 && (
-            <span className="bg-white/20 px-2 py-0.5 rounded text-sm">
-              {selectedIds.length}개 선택됨
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-white/70 text-sm">
-            {isExpanded ? '접기' : '클릭하여 펼치기'}
-          </span>
-          <span className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
-            ▼
-          </span>
-        </div>
-      </button>
+  if (!isOpen) return null
 
-      {/* 펼쳐진 내용 */}
-      {isExpanded && (
-        <div className="p-6">
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* 배경 오버레이 */}
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* 모달 본체 */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-[95vw] max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+        {/* 모달 헤더 */}
+        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">📈</span>
+            <div>
+              <h2 className="text-xl font-bold">통계 대시보드</h2>
+              <p className="text-white/70 text-sm">{selectedIds.length}개 리포트 선택됨</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* 모달 본문 */}
+        <div className="flex-1 overflow-y-auto p-6">
           {selectedIds.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <p>📊 리포트를 선택하면 통계를 확인할 수 있습니다.</p>
+            <div className="text-center py-12 text-gray-500">
+              <p className="text-lg">📊 리포트를 선택하면 통계를 확인할 수 있습니다.</p>
             </div>
           ) : loading ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mx-auto"></div>
-              <p className="mt-2 text-gray-600">통계 로딩 중...</p>
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-500 mx-auto"></div>
+              <p className="mt-4 text-gray-600">통계 로딩 중...</p>
             </div>
           ) : stats ? (
             <>
@@ -349,12 +368,12 @@ export default function StatsDashboard({ selectedIds, isExpanded, onToggle }: St
               </div>
             </>
           ) : (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-12 text-gray-500">
               <p>통계를 불러올 수 없습니다.</p>
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
