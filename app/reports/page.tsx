@@ -15,6 +15,7 @@ export default function ReportsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const [statsModalOpen, setStatsModalOpen] = useState(false)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const limit = 100
 
   // 정렬 및 필터 상태
@@ -159,6 +160,48 @@ export default function ReportsPage() {
   }
 
   const hasActiveFilters = nameFilter || dateStart || dateEnd || sortBy !== 'date' || sortOrder !== 'desc'
+
+  // 이름별로 그룹화된 리포트
+  const groupedReports = useMemo(() => {
+    const groups: { [name: string]: typeof filteredReports } = {}
+
+    filteredReports.forEach(report => {
+      const name = report.reporterName || '이름 없음'
+      if (!groups[name]) {
+        groups[name] = []
+      }
+      groups[name].push(report)
+    })
+
+    // 그룹별 통계 계산
+    return Object.entries(groups).map(([name, reports]) => ({
+      name,
+      reports,
+      totalCost: reports.reduce((sum, r) => sum + (r.summary?.totalCost || 0), 0),
+      totalTokens: reports.reduce((sum, r) => sum + (r.summary?.totalTokens || 0), 0),
+      count: reports.length
+    }))
+  }, [filteredReports])
+
+  const toggleGroup = (name: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(name)) {
+        next.delete(name)
+      } else {
+        next.add(name)
+      }
+      return next
+    })
+  }
+
+  const expandAll = () => {
+    setExpandedGroups(new Set(groupedReports.map(g => g.name)))
+  }
+
+  const collapseAll = () => {
+    setExpandedGroups(new Set())
+  }
 
   // 선택된 리포트들의 통계 합계
   const selectedReports = reports.filter(r => selectedIds.includes(r.id))
@@ -358,11 +401,30 @@ export default function ReportsPage() {
               )}
             </div>
 
-            {/* 필터 결과 */}
-            <div className="text-sm text-gray-500">
-              {filteredReports.length === reports.length
-                ? `전체 ${reports.length}개`
-                : `${reports.length}개 중 ${filteredReports.length}개 표시`}
+            {/* 필터 결과 및 그룹 제어 */}
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-gray-500">
+                {filteredReports.length === reports.length
+                  ? `전체 ${reports.length}개`
+                  : `${reports.length}개 중 ${filteredReports.length}개 표시`}
+                {groupedReports.length > 1 && ` (${groupedReports.length}명)`}
+              </div>
+              {groupedReports.length > 0 && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={expandAll}
+                    className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+                  >
+                    전체 펼치기
+                  </button>
+                  <button
+                    onClick={collapseAll}
+                    className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+                  >
+                    전체 접기
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -381,58 +443,118 @@ export default function ReportsPage() {
               </button>
             </div>
           )}
-          {filteredReports.map((report, idx) => (
-            <div
-              key={report.id}
-              className={`bg-white rounded-lg shadow-md p-6 transition-all ${
-                selectedIds.includes(report.id) ? 'ring-2 ring-blue-500' : ''
-              }`}
-            >
-              {/* 리포트 헤더 */}
-              <div className="flex items-start gap-4">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(report.id)}
-                  onChange={() => toggleSelection(report.id)}
-                  className="mt-1 w-5 h-5 text-blue-500 rounded focus:ring-blue-500"
-                />
-                <div className="flex-1">
-                  <h2 className="text-xl font-bold text-gray-800 mb-1">
-                    {report.reporterName || `리포트 #${filteredReports.length - idx}`} - {report.period}
-                  </h2>
-                  <p className="text-sm text-gray-500">
-                    {new Date(report.createdAt).toLocaleString('ko-KR')}
-                  </p>
+          {groupedReports.map((group) => {
+            const isExpanded = expandedGroups.has(group.name)
 
-                  {/* 통계 */}
-                  {report.summary && (
-                    <div className="mt-4">
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-blue-50 rounded p-2">
-                          <div className="text-xs text-gray-600">비용</div>
-                          <div className="text-lg font-bold text-blue-600">
-                            ${report.summary.totalCost?.toFixed(2)}
-                          </div>
-                        </div>
-                        <div className="bg-green-50 rounded p-2">
-                          <div className="text-xs text-gray-600">토큰</div>
-                          <div className="text-lg font-bold text-green-600">
-                            {((report.summary.totalTokens || 0) / 1000000).toFixed(1)}M
-                          </div>
-                        </div>
-                        <div className="bg-purple-50 rounded p-2">
-                          <div className="text-xs text-gray-600">파일</div>
-                          <div className="text-lg font-bold text-purple-600">
-                            {report.summary.totalMembers}
+            return (
+              <div key={group.name} className="bg-white rounded-lg shadow-md overflow-hidden">
+                {/* 그룹 헤더 */}
+                <div
+                  className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => toggleGroup(group.name)}
+                >
+                  <div className="flex items-center gap-4">
+                    {/* 그룹 전체 선택 체크박스 */}
+                    <input
+                      type="checkbox"
+                      checked={group.reports.every(r => selectedIds.includes(r.id))}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => {
+                        const allSelected = group.reports.every(r => selectedIds.includes(r.id))
+                        if (allSelected) {
+                          setSelectedIds(prev => prev.filter(id => !group.reports.some(r => r.id === id)))
+                        } else {
+                          setSelectedIds(prev => [...new Set([...prev, ...group.reports.map(r => r.id)])])
+                        }
+                      }}
+                      className="w-5 h-5 text-blue-500 rounded focus:ring-blue-500"
+                    />
+
+                    {/* 펼치기/접기 아이콘 */}
+                    <span className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                      ▶
+                    </span>
+
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-bold text-gray-800">
+                          {group.name}
+                        </h2>
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                          {group.count}개
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 그룹 합계 통계 */}
+                    <div className="flex gap-4 text-sm">
+                      <div className="text-right">
+                        <div className="text-xs text-gray-500">총 비용</div>
+                        <div className="font-bold text-blue-600">${group.totalCost.toFixed(2)}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs text-gray-500">총 토큰</div>
+                        <div className="font-bold text-green-600">{(group.totalTokens / 1000000).toFixed(1)}M</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 개별 리포트 (펼쳐진 경우) */}
+                {isExpanded && (
+                  <div className="border-t bg-gray-50">
+                    {group.reports.map((report, idx) => (
+                      <div
+                        key={report.id}
+                        className={`p-4 ${idx > 0 ? 'border-t border-gray-200' : ''} ${
+                          selectedIds.includes(report.id) ? 'bg-blue-50' : ''
+                        }`}
+                      >
+                        <div className="flex items-start gap-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(report.id)}
+                            onChange={() => toggleSelection(report.id)}
+                            className="mt-1 w-5 h-5 text-blue-500 rounded focus:ring-blue-500"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h3 className="font-semibold text-gray-800">
+                                  {report.period}
+                                </h3>
+                                <p className="text-sm text-gray-500">
+                                  {new Date(report.createdAt).toLocaleString('ko-KR')}
+                                </p>
+                              </div>
+
+                              {/* 개별 통계 */}
+                              {report.summary && (
+                                <div className="flex gap-4 text-sm">
+                                  <div className="bg-blue-50 rounded px-3 py-1">
+                                    <span className="text-xs text-gray-600">비용 </span>
+                                    <span className="font-bold text-blue-600">
+                                      ${report.summary.totalCost?.toFixed(2)}
+                                    </span>
+                                  </div>
+                                  <div className="bg-green-50 rounded px-3 py-1">
+                                    <span className="text-xs text-gray-600">토큰 </span>
+                                    <span className="font-bold text-green-600">
+                                      {((report.summary.totalTokens || 0) / 1000000).toFixed(1)}M
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         {/* 페이징 */}
