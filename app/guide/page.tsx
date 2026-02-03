@@ -72,12 +72,17 @@ month_day_start=\${last_monday:4:4}
 month_day_end=\${last_sunday:4:4}
 output_file="${folderPath}/\${USERNAME}\${month_day_start}-\${month_day_end}.json"
 
+# 이미 파일이 있으면 스킵 (이번 주에 이미 처리됨)
+if [ -f "\$output_file" ]; then
+  exit 0
+fi
+
 # ccusage 실행
 cd ${folderPath}
 npx ccusage daily --json --since $last_monday --until $last_sunday > "\$output_file"
 
 # ccusage 실행 결과 확인
-if [ ! -f "\$output_file" ]; then
+if [ ! -f "\$output_file" ] || [ ! -s "\$output_file" ]; then
   echo "[\$(date)] 오류: JSON 파일 생성 실패" >> ${folderPath}/ccusage-cron.log
   exit 1
 fi
@@ -104,8 +109,8 @@ else
 fi
 `
 
-  const crontabEntry = `# 매주 월요일 오전 10시에 자동 실행
-0 10 * * 1 /bin/bash ${folderPath}/run-ccusage.sh`
+  const crontabEntry = `# 매일 오전 10시에 자동 실행 (저번주 데이터 없으면 생성)
+0 10 * * * /bin/bash ${folderPath}/run-ccusage.sh`
 
   const copyToClipboard = async (text: string, label: string) => {
     try {
@@ -533,18 +538,19 @@ fi
             📅 실행 스케줄
           </h2>
           <div style={{ fontSize: '0.875rem', color: '#475569', lineHeight: '1.8' }}>
-            <p><strong>매주 월요일 오전 9시</strong>에 자동으로 <strong>저번주 월요일~일요일</strong> 데이터를 수집하고 DB에 저장합니다.</p>
+            <p><strong>매일 오전 10시</strong>에 자동으로 <strong>저번주 월요일~일요일</strong> 데이터가 있는지 확인하고, 없으면 수집 후 DB에 저장합니다.</p>
             <p style={{ marginTop: '1rem' }}>처리 과정:</p>
             <ol style={{ paddingLeft: '1.5rem', marginBottom: '1rem' }}>
-              <li>ccusage 명령어로 JSON 파일 생성</li>
+              <li>저번주 데이터 파일이 이미 있는지 확인</li>
+              <li>있으면 스킵, 없으면 ccusage 실행</li>
               <li>생성된 JSON 데이터를 API로 전송</li>
               <li>DB에 데이터 저장</li>
-              <li>결과를 로그 파일에 기록</li>
             </ol>
             <p style={{ marginTop: '1rem' }}>예시:</p>
             <ul style={{ paddingLeft: '1.5rem' }}>
-              <li>2026년 2월 3일 (월) 오전 9시 → 1월 27일(월) ~ 2월 2일(일) 데이터 수집 + DB 저장</li>
-              <li>2026년 2월 10일 (월) 오전 9시 → 2월 3일(월) ~ 2월 9일(일) 데이터 수집 + DB 저장</li>
+              <li>2월 3일(월) 휴가로 맥북 꺼짐 → 실행 안 됨</li>
+              <li>2월 4일(화) 맥북 켜짐 → 1월 27일 ~ 2월 2일 데이터 수집 + DB 저장</li>
+              <li>2월 5일(수)~9일(일) → 파일 이미 있으므로 스킵</li>
             </ul>
           </div>
         </div>
