@@ -1,7 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import StatsDashboard from '@/components/StatsDashboard'
+
+type SortBy = 'date' | 'name' | 'cost'
+type SortOrder = 'asc' | 'desc'
 
 export default function ReportsPage() {
   const [loading, setLoading] = useState(true)
@@ -13,6 +16,13 @@ export default function ReportsPage() {
   const [total, setTotal] = useState(0)
   const [statsExpanded, setStatsExpanded] = useState(false)
   const limit = 100
+
+  // 정렬 및 필터 상태
+  const [sortBy, setSortBy] = useState<SortBy>('date')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+  const [nameFilter, setNameFilter] = useState<string>('')
+  const [dateStart, setDateStart] = useState<string>('')
+  const [dateEnd, setDateEnd] = useState<string>('')
 
   useEffect(() => {
     fetchReports()
@@ -78,6 +88,77 @@ export default function ReportsPage() {
       alert('다운로드에 실패했습니다.')
     }
   }
+
+  // 유니크한 이름 목록 추출
+  const uniqueNames = useMemo(() => {
+    const names = reports
+      .map(r => r.reporterName)
+      .filter((name): name is string => !!name)
+    return [...new Set(names)].sort()
+  }, [reports])
+
+  // period에서 시작 날짜 추출 (YYYYMMDD ~ YYYYMMDD 형식)
+  const extractStartDate = (period: string): string => {
+    const match = period?.match(/^(\d{8})/)
+    return match ? match[1] : ''
+  }
+
+  // 필터링 및 정렬된 리포트
+  const filteredReports = useMemo(() => {
+    let result = [...reports]
+
+    // 이름 필터
+    if (nameFilter) {
+      result = result.filter(r => r.reporterName === nameFilter)
+    }
+
+    // 날짜 필터 (period의 시작 날짜 기준)
+    if (dateStart) {
+      const startNum = dateStart.replace(/-/g, '')
+      result = result.filter(r => {
+        const periodStart = extractStartDate(r.period)
+        return periodStart >= startNum
+      })
+    }
+    if (dateEnd) {
+      const endNum = dateEnd.replace(/-/g, '')
+      result = result.filter(r => {
+        const periodStart = extractStartDate(r.period)
+        return periodStart <= endNum
+      })
+    }
+
+    // 정렬
+    result.sort((a, b) => {
+      let comparison = 0
+      switch (sortBy) {
+        case 'name':
+          comparison = (a.reporterName || '').localeCompare(b.reporterName || '')
+          break
+        case 'cost':
+          comparison = (a.summary?.totalCost || 0) - (b.summary?.totalCost || 0)
+          break
+        case 'date':
+        default:
+          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          break
+      }
+      return sortOrder === 'asc' ? comparison : -comparison
+    })
+
+    return result
+  }, [reports, nameFilter, dateStart, dateEnd, sortBy, sortOrder])
+
+  // 필터 초기화
+  const resetFilters = () => {
+    setSortBy('date')
+    setSortOrder('desc')
+    setNameFilter('')
+    setDateStart('')
+    setDateEnd('')
+  }
+
+  const hasActiveFilters = nameFilter || dateStart || dateEnd || sortBy !== 'date' || sortOrder !== 'desc'
 
   // 선택된 리포트들의 통계 합계
   const selectedReports = reports.filter(r => selectedIds.includes(r.id))
@@ -195,9 +276,122 @@ export default function ReportsPage() {
           onToggle={() => setStatsExpanded(!statsExpanded)}
         />
 
+        {/* 스크롤 화살표 */}
+        <div className="flex justify-center mb-6">
+          <button
+            onClick={() => {
+              document.getElementById('report-list')?.scrollIntoView({ behavior: 'smooth' })
+            }}
+            className="text-gray-400 hover:text-gray-600 transition-colors animate-bounce"
+            title="리포트 목록으로 이동"
+          >
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+          </button>
+        </div>
+
+        {/* 필터 및 정렬 */}
+        <div id="report-list" className="bg-white rounded-lg shadow-md p-4 mb-4">
+          <div className="flex flex-wrap items-end gap-4 justify-between">
+            <div className="flex flex-wrap items-end gap-4">
+              {/* 정렬 */}
+              <div className="flex gap-2">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">정렬</label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortBy)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="date">날짜순</option>
+                    <option value="name">이름순</option>
+                    <option value="cost">비용순</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">순서</label>
+                  <select
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="desc">내림차순</option>
+                    <option value="asc">오름차순</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 이름 필터 */}
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">이름</label>
+                <select
+                  value={nameFilter}
+                  onChange={(e) => setNameFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px]"
+                >
+                  <option value="">전체</option>
+                  {uniqueNames.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 날짜 필터 */}
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">시작일</label>
+                <input
+                  type="date"
+                  value={dateStart}
+                  onChange={(e) => setDateStart(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">종료일</label>
+                <input
+                  type="date"
+                  value={dateEnd}
+                  onChange={(e) => setDateEnd(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* 초기화 버튼 */}
+              {hasActiveFilters && (
+                <button
+                  onClick={resetFilters}
+                  className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  ✕ 초기화
+                </button>
+              )}
+            </div>
+
+            {/* 필터 결과 */}
+            <div className="text-sm text-gray-500">
+              {filteredReports.length === reports.length
+                ? `전체 ${reports.length}개`
+                : `${reports.length}개 중 ${filteredReports.length}개 표시`}
+            </div>
+          </div>
+        </div>
+
         {/* 리포트 목록 */}
         <div className="space-y-4">
-          {reports.map((report, idx) => (
+          {filteredReports.length === 0 && (
+            <div className="bg-white rounded-lg shadow-md p-8 text-center">
+              <div className="text-gray-400 text-4xl mb-2">🔍</div>
+              <p className="text-gray-600">필터 조건에 맞는 리포트가 없습니다.</p>
+              <button
+                onClick={resetFilters}
+                className="mt-3 text-blue-500 hover:text-blue-600 text-sm"
+              >
+                필터 초기화
+              </button>
+            </div>
+          )}
+          {filteredReports.map((report, idx) => (
             <div
               key={report.id}
               className={`bg-white rounded-lg shadow-md p-6 transition-all ${
@@ -214,7 +408,7 @@ export default function ReportsPage() {
                 />
                 <div className="flex-1">
                   <h2 className="text-xl font-bold text-gray-800 mb-1">
-                    {report.reporterName || `리포트 #${reports.length - idx}`} - {report.period}
+                    {report.reporterName || `리포트 #${filteredReports.length - idx}`} - {report.period}
                   </h2>
                   <p className="text-sm text-gray-500">
                     {new Date(report.createdAt).toLocaleString('ko-KR')}

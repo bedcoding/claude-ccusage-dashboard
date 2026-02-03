@@ -72,15 +72,15 @@ export default function StatsDashboard({ selectedIds, isExpanded, onToggle }: St
   const formatTokens = (value: number) => `${(value / 1000000).toFixed(2)}M`
 
   return (
-    <div className="bg-white rounded-lg shadow-md mb-6 overflow-hidden">
+    <div className="bg-white rounded-lg shadow-md mb-8 overflow-hidden">
       {/* 토글 헤더 */}
       <button
         onClick={onToggle}
-        className="w-full px-6 py-4 flex items-center justify-between bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 transition-all"
+        className="w-full px-5 py-3 flex items-center justify-between bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 transition-all"
       >
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">📈</span>
-          <span className="font-bold text-lg">통계 대시보드</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xl">📈</span>
+          <span className="font-bold">통계 대시보드</span>
           {selectedIds.length > 0 && (
             <span className="bg-white/20 px-2 py-0.5 rounded text-sm">
               {selectedIds.length}개 선택됨
