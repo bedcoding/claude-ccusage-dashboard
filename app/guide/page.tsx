@@ -74,6 +74,7 @@ output_file="${folderPath}/\${USERNAME}\${month_day_start}-\${month_day_end}.jso
 
 # 이미 파일이 있으면 스킵 (이번 주에 이미 처리됨)
 if [ -f "\$output_file" ]; then
+  echo "[\$(date)] 스킵: 이미 존재 (\$last_monday ~ \$last_sunday)" >> ${folderPath}/ccusage-cron.log
   exit 0
 fi
 
