@@ -13,6 +13,7 @@ export default function Home() {
   const [message, setMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null)
   const [copied, setCopied] = useState(false)
   const [userName, setUserName] = useState('')
+  const [teamName, setTeamName] = useState('')
   const [directoryHandle, setDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null)
   const [selectedFolder, setSelectedFolder] = useState('')
   const [customSince, setCustomSince] = useState('')
@@ -70,11 +71,15 @@ export default function Home() {
     })
   }
 
-  // localStorage에서 사용자 이름 및 슬랙 설정 불러오기
+  // localStorage에서 사용자 이름/팀명 및 슬랙 설정 불러오기
   useEffect(() => {
     const savedName = localStorage.getItem('claudeUserName')
     if (savedName) {
       setUserName(savedName)
+    }
+    const savedTeamName = localStorage.getItem('claudeTeamName')
+    if (savedTeamName) {
+      setTeamName(savedTeamName)
     }
 
     // IndexedDB에서 폴더 핸들 불러오기
@@ -85,6 +90,12 @@ export default function Home() {
   const handleUserNameChange = (name: string) => {
     setUserName(name)
     localStorage.setItem('claudeUserName', name)
+  }
+
+  // 팀명 변경시 localStorage에 저장
+  const handleTeamNameChange = (name: string) => {
+    setTeamName(name)
+    localStorage.setItem('claudeTeamName', name)
   }
 
   // 폴더 선택
@@ -477,7 +488,8 @@ export default function Home() {
           customSince,
           customUntil,
           weekDates,
-          userName
+          userName,
+          teamName
         })
       })
 
@@ -643,13 +655,24 @@ export default function Home() {
           </div>
           <div className="input-row">
             <div className="name-input-container">
+              <label htmlFor="teamName">🏢 팀명 입력</label>
+              <input
+                id="teamName"
+                type="text"
+                value={teamName}
+                onChange={(e) => handleTeamNameChange(e.target.value)}
+                placeholder="ㅇㅇ프론트팀"
+                className="name-input"
+              />
+            </div>
+            <div className="name-input-container">
               <label htmlFor="userName">👤 이름 입력</label>
               <input
                 id="userName"
                 type="text"
                 value={userName}
                 onChange={(e) => handleUserNameChange(e.target.value)}
-                placeholder="이름을 넣으면 localStorage에 저장됩니다."
+                placeholder="홍길동"
                 className="name-input"
               />
             </div>

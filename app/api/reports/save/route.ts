@@ -6,7 +6,7 @@ import { REPORTS_URL } from '@/lib/constants'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { stats, mergedData, teamData, customSince, customUntil, weekDates, userName } = body
+    const { stats, mergedData, teamData, customSince, customUntil, weekDates, userName, teamName } = body
 
     // DB에 리포트 데이터 저장
     const reportId = randomUUID()
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       members: stats?.members || []
     }
 
-    await saveReport(reportId, userName || null, period, rawData, summary)
+    await saveReport(reportId, userName || null, teamName || null, period, rawData, summary)
 
     const reportsUrl = REPORTS_URL
 

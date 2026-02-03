@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 
 export default function GuidePage() {
   const [userName, setUserName] = useState('안성민')
+  const [teamName, setTeamName] = useState('')
   const [macUserName, setMacUserName] = useState('')
   const [folderPath, setFolderPath] = useState('/Users/사용자이름/ccusage-data')
   const [apiUrl, setApiUrl] = useState('https://claude-ccusage-dashboard.vercel.app')
@@ -12,11 +13,13 @@ export default function GuidePage() {
   // 로컬스토리지에서 저장된 값 불러오기
   useEffect(() => {
     const savedUserName = localStorage.getItem('guide-userName')
+    const savedTeamName = localStorage.getItem('guide-teamName')
     const savedMacUserName = localStorage.getItem('guide-macUserName')
     const savedFolderPath = localStorage.getItem('guide-folderPath')
     const savedApiUrl = localStorage.getItem('guide-apiUrl')
 
     if (savedUserName) setUserName(savedUserName)
+    if (savedTeamName) setTeamName(savedTeamName)
     if (savedMacUserName) setMacUserName(savedMacUserName)
     if (savedFolderPath) setFolderPath(savedFolderPath)
     if (savedApiUrl) setApiUrl(savedApiUrl)
@@ -26,6 +29,10 @@ export default function GuidePage() {
   useEffect(() => {
     localStorage.setItem('guide-userName', userName)
   }, [userName])
+
+  useEffect(() => {
+    localStorage.setItem('guide-teamName', teamName)
+  }, [teamName])
 
   useEffect(() => {
     localStorage.setItem('guide-macUserName', macUserName)
@@ -53,8 +60,9 @@ export default function GuidePage() {
 last_monday=$(date -v-1w -v-mon +%Y%m%d)
 last_sunday=$(date -j -v+6d -f "%Y%m%d" "$last_monday" +%Y%m%d)
 
-# 사용자 이름 설정
+# 사용자 이름/팀명 설정
 USERNAME="${userName}"
+TEAMNAME="${teamName}"
 
 # API URL 설정
 API_URL="${apiUrl}"
@@ -82,6 +90,7 @@ response=\$(curl -s -X POST "\$API_URL/api/reports/save-raw" \\
   -H "Content-Type: application/json" \\
   -d "{
     \\"userName\\": \\"\$USERNAME\\",
+    \\"teamName\\": \\"\$TEAMNAME\\",
     \\"ccusageData\\": \$json_data,
     \\"since\\": \\"\$last_monday\\",
     \\"until\\": \\"\$last_sunday\\"
@@ -121,6 +130,24 @@ fi
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem', color: '#1e293b' }}>
             1️⃣ 설정
           </h2>
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', fontWeight: '500', marginBottom: '0.5rem', color: '#475569' }}>
+              🏢 팀명
+            </label>
+            <input
+              type="text"
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+              placeholder="팀명 입력"
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                fontSize: '1rem'
+              }}
+            />
+          </div>
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', fontWeight: '500', marginBottom: '0.5rem', color: '#475569' }}>
               👤 이름

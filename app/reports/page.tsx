@@ -15,12 +15,14 @@ export default function ReportsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const [statsModalOpen, setStatsModalOpen] = useState(false)
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set())
+  const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set())
   const limit = 100
 
   // 정렬 및 필터 상태
   const [sortBy, setSortBy] = useState<SortBy>('date')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+  const [teamFilter, setTeamFilter] = useState<string>('')
   const [nameFilter, setNameFilter] = useState<string>('')
   const [dateStart, setDateStart] = useState<string>('')
   const [dateEnd, setDateEnd] = useState<string>('')
@@ -62,6 +64,9 @@ export default function ReportsPage() {
       return
     }
 
+    console.log('[Download] 선택된 엑셀: ', selectedIds)
+    console.log('[Download] 리포트 개수: ', selectedIds.length)
+
     try {
       const res = await fetch('/api/excel', {
         method: 'POST',
@@ -90,6 +95,14 @@ export default function ReportsPage() {
     }
   }
 
+  // 유니크한 팀명 목록 추출
+  const uniqueTeams = useMemo(() => {
+    const teams = reports
+      .map(r => r.teamName)
+      .filter((team): team is string => !!team)
+    return [...new Set(teams)].sort()
+  }, [reports])
+
   // 유니크한 이름 목록 추출
   const uniqueNames = useMemo(() => {
     const names = reports
@@ -107,6 +120,11 @@ export default function ReportsPage() {
   // 필터링 및 정렬된 리포트
   const filteredReports = useMemo(() => {
     let result = [...reports]
+
+    // 팀명 필터
+    if (teamFilter) {
+      result = result.filter(r => r.teamName === teamFilter)
+    }
 
     // 이름 필터
     if (nameFilter) {
@@ -148,59 +166,90 @@ export default function ReportsPage() {
     })
 
     return result
-  }, [reports, nameFilter, dateStart, dateEnd, sortBy, sortOrder])
+  }, [reports, teamFilter, nameFilter, dateStart, dateEnd, sortBy, sortOrder])
 
   // 필터 초기화
   const resetFilters = () => {
     setSortBy('date')
     setSortOrder('desc')
+    setTeamFilter('')
     setNameFilter('')
     setDateStart('')
     setDateEnd('')
   }
 
-  const hasActiveFilters = nameFilter || dateStart || dateEnd || sortBy !== 'date' || sortOrder !== 'desc'
+  const hasActiveFilters = teamFilter || nameFilter || dateStart || dateEnd || sortBy !== 'date' || sortOrder !== 'desc'
 
-  // 이름별로 그룹화된 리포트
-  const groupedReports = useMemo(() => {
-    const groups: { [name: string]: typeof filteredReports } = {}
+  // 팀 > 이름 2단계 그룹화
+  const groupedByTeam = useMemo(() => {
+    const teamGroups: { [team: string]: { [name: string]: typeof filteredReports } } = {}
 
     filteredReports.forEach(report => {
+      const team = report.teamName || '(팀 없음)'
       const name = report.reporterName || '이름 없음'
-      if (!groups[name]) {
-        groups[name] = []
-      }
-      groups[name].push(report)
+
+      if (!teamGroups[team]) teamGroups[team] = {}
+      if (!teamGroups[team][name]) teamGroups[team][name] = []
+      teamGroups[team][name].push(report)
     })
 
-    // 그룹별 통계 계산
-    return Object.entries(groups).map(([name, reports]) => ({
-      name,
-      reports,
-      totalCost: reports.reduce((sum, r) => sum + (r.summary?.totalCost || 0), 0),
-      totalTokens: reports.reduce((sum, r) => sum + (r.summary?.totalTokens || 0), 0),
-      count: reports.length
-    }))
+    return Object.entries(teamGroups).map(([team, members]) => {
+      const memberList = Object.entries(members).map(([name, reports]) => ({
+        name,
+        reports,
+        totalCost: reports.reduce((sum, r) => sum + (r.summary?.totalCost || 0), 0),
+        totalTokens: reports.reduce((sum, r) => sum + (r.summary?.totalTokens || 0), 0),
+        count: reports.length
+      }))
+
+      return {
+        team,
+        members: memberList,
+        totalCost: memberList.reduce((sum, m) => sum + m.totalCost, 0),
+        totalTokens: memberList.reduce((sum, m) => sum + m.totalTokens, 0),
+        count: memberList.reduce((sum, m) => sum + m.count, 0)
+      }
+    })
   }, [filteredReports])
 
-  const toggleGroup = (name: string) => {
-    setExpandedGroups(prev => {
+  const toggleTeam = (team: string) => {
+    setExpandedTeams(prev => {
       const next = new Set(prev)
-      if (next.has(name)) {
-        next.delete(name)
+      if (next.has(team)) {
+        next.delete(team)
       } else {
-        next.add(name)
+        next.add(team)
+      }
+      return next
+    })
+  }
+
+  const toggleMember = (key: string) => {
+    setExpandedMembers(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
       }
       return next
     })
   }
 
   const expandAll = () => {
-    setExpandedGroups(new Set(groupedReports.map(g => g.name)))
+    setExpandedTeams(new Set(groupedByTeam.map(g => g.team)))
+    const allMemberKeys: string[] = []
+    groupedByTeam.forEach(g => {
+      g.members.forEach(m => {
+        allMemberKeys.push(`${g.team}-${m.name}`)
+      })
+    })
+    setExpandedMembers(new Set(allMemberKeys))
   }
 
   const collapseAll = () => {
-    setExpandedGroups(new Set())
+    setExpandedTeams(new Set())
+    setExpandedMembers(new Set())
   }
 
   // 선택된 리포트들의 통계 합계
@@ -355,6 +404,21 @@ export default function ReportsPage() {
                 </div>
               </div>
 
+              {/* 팀명 필터 */}
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">팀명</label>
+                <select
+                  value={teamFilter}
+                  onChange={(e) => setTeamFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px]"
+                >
+                  <option value="">전체</option>
+                  {uniqueTeams.map(team => (
+                    <option key={team} value={team}>{team}</option>
+                  ))}
+                </select>
+              </div>
+
               {/* 이름 필터 */}
               <div>
                 <label className="block text-xs text-gray-600 mb-1">이름</label>
@@ -407,9 +471,9 @@ export default function ReportsPage() {
                 {filteredReports.length === reports.length
                   ? `전체 ${reports.length}개`
                   : `${reports.length}개 중 ${filteredReports.length}개 표시`}
-                {groupedReports.length > 1 && ` (${groupedReports.length}명)`}
+                {groupedByTeam.length > 0 && ` (${groupedByTeam.length}팀)`}
               </div>
-              {groupedReports.length > 0 && (
+              {groupedByTeam.length > 0 && (
                 <div className="flex gap-2">
                   <button
                     onClick={expandAll}
@@ -443,113 +507,179 @@ export default function ReportsPage() {
               </button>
             </div>
           )}
-          {groupedReports.map((group) => {
-            const isExpanded = expandedGroups.has(group.name)
+          {groupedByTeam.map((teamGroup) => {
+            const isTeamExpanded = expandedTeams.has(teamGroup.team)
+            const allTeamReports = teamGroup.members.flatMap(m => m.reports)
 
             return (
-              <div key={group.name} className="bg-white rounded-lg shadow-md overflow-hidden">
-                {/* 그룹 헤더 */}
+              <div key={teamGroup.team} className="bg-white rounded-lg shadow-md overflow-hidden">
+                {/* 팀 헤더 */}
                 <div
-                  className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
-                  onClick={() => toggleGroup(group.name)}
+                  className="p-4 cursor-pointer hover:bg-gray-50 transition-colors bg-gradient-to-r from-slate-50 to-white"
+                  onClick={() => toggleTeam(teamGroup.team)}
                 >
                   <div className="flex items-center gap-4">
-                    {/* 그룹 전체 선택 체크박스 */}
+                    {/* 팀 전체 선택 체크박스 */}
                     <input
                       type="checkbox"
-                      checked={group.reports.every(r => selectedIds.includes(r.id))}
+                      checked={allTeamReports.every(r => selectedIds.includes(r.id))}
                       onClick={(e) => e.stopPropagation()}
                       onChange={() => {
-                        const allSelected = group.reports.every(r => selectedIds.includes(r.id))
+                        const allSelected = allTeamReports.every(r => selectedIds.includes(r.id))
                         if (allSelected) {
-                          setSelectedIds(prev => prev.filter(id => !group.reports.some(r => r.id === id)))
+                          setSelectedIds(prev => prev.filter(id => !allTeamReports.some(r => r.id === id)))
                         } else {
-                          setSelectedIds(prev => [...new Set([...prev, ...group.reports.map(r => r.id)])])
+                          setSelectedIds(prev => [...new Set([...prev, ...allTeamReports.map(r => r.id)])])
                         }
                       }}
                       className="w-5 h-5 text-blue-500 rounded focus:ring-blue-500"
                     />
 
                     {/* 펼치기/접기 아이콘 */}
-                    <span className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                    <span className={`text-gray-400 transition-transform ${isTeamExpanded ? 'rotate-90' : ''}`}>
                       ▶
                     </span>
 
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
+                        <span className="text-lg">🏢</span>
                         <h2 className="text-lg font-bold text-gray-800">
-                          {group.name}
+                          {teamGroup.team}
                         </h2>
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                          {teamGroup.members.length}명
+                        </span>
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
-                          {group.count}개
+                          {teamGroup.count}개
                         </span>
                       </div>
                     </div>
 
-                    {/* 그룹 합계 통계 */}
+                    {/* 팀 합계 통계 */}
                     <div className="flex gap-4 text-sm">
                       <div className="text-right">
                         <div className="text-xs text-gray-500">총 비용</div>
-                        <div className="font-bold text-blue-600">${group.totalCost.toFixed(2)}</div>
+                        <div className="font-bold text-blue-600">${teamGroup.totalCost.toFixed(2)}</div>
                       </div>
                       <div className="text-right">
                         <div className="text-xs text-gray-500">총 토큰</div>
-                        <div className="font-bold text-green-600">{(group.totalTokens / 1000000).toFixed(1)}M</div>
+                        <div className="font-bold text-green-600">{(teamGroup.totalTokens / 1000000).toFixed(1)}M</div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* 개별 리포트 (펼쳐진 경우) */}
-                {isExpanded && (
-                  <div className="border-t bg-gray-50">
-                    {group.reports.map((report, idx) => (
-                      <div
-                        key={report.id}
-                        className={`p-4 ${idx > 0 ? 'border-t border-gray-200' : ''} ${
-                          selectedIds.includes(report.id) ? 'bg-blue-50' : ''
-                        }`}
-                      >
-                        <div className="flex items-start gap-4">
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.includes(report.id)}
-                            onChange={() => toggleSelection(report.id)}
-                            className="mt-1 w-5 h-5 text-blue-500 rounded focus:ring-blue-500"
-                          />
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <h3 className="font-semibold text-gray-800">
-                                  {report.period}
-                                </h3>
-                                <p className="text-sm text-gray-500">
-                                  {new Date(report.createdAt).toLocaleString('ko-KR')}
-                                </p>
+                {/* 멤버 목록 (팀이 펼쳐진 경우) */}
+                {isTeamExpanded && (
+                  <div className="border-t">
+                    {teamGroup.members.map((member) => {
+                      const memberKey = `${teamGroup.team}-${member.name}`
+                      const isMemberExpanded = expandedMembers.has(memberKey)
+
+                      return (
+                        <div key={member.name} className="border-b last:border-b-0">
+                          {/* 멤버 헤더 */}
+                          <div
+                            className="p-3 pl-12 cursor-pointer hover:bg-gray-50 transition-colors bg-gray-50"
+                            onClick={() => toggleMember(memberKey)}
+                          >
+                            <div className="flex items-center gap-4">
+                              {/* 멤버 전체 선택 체크박스 */}
+                              <input
+                                type="checkbox"
+                                checked={member.reports.every(r => selectedIds.includes(r.id))}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={() => {
+                                  const allSelected = member.reports.every(r => selectedIds.includes(r.id))
+                                  if (allSelected) {
+                                    setSelectedIds(prev => prev.filter(id => !member.reports.some(r => r.id === id)))
+                                  } else {
+                                    setSelectedIds(prev => [...new Set([...prev, ...member.reports.map(r => r.id)])])
+                                  }
+                                }}
+                                className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
+                              />
+
+                              {/* 펼치기/접기 아이콘 */}
+                              <span className={`text-gray-400 text-sm transition-transform ${isMemberExpanded ? 'rotate-90' : ''}`}>
+                                ▶
+                              </span>
+
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span>👤</span>
+                                  <h3 className="font-semibold text-gray-700">
+                                    {member.name}
+                                  </h3>
+                                  <span className="px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded-full">
+                                    {member.count}개
+                                  </span>
+                                </div>
                               </div>
 
-                              {/* 개별 통계 */}
-                              {report.summary && (
-                                <div className="flex gap-4 text-sm">
-                                  <div className="bg-blue-50 rounded px-3 py-1">
-                                    <span className="text-xs text-gray-600">비용 </span>
-                                    <span className="font-bold text-blue-600">
-                                      ${report.summary.totalCost?.toFixed(2)}
-                                    </span>
-                                  </div>
-                                  <div className="bg-green-50 rounded px-3 py-1">
-                                    <span className="text-xs text-gray-600">토큰 </span>
-                                    <span className="font-bold text-green-600">
-                                      {((report.summary.totalTokens || 0) / 1000000).toFixed(1)}M
-                                    </span>
-                                  </div>
+                              {/* 멤버 통계 */}
+                              <div className="flex gap-4 text-sm">
+                                <div className="text-right">
+                                  <div className="text-xs text-gray-500">비용</div>
+                                  <div className="font-bold text-blue-600">${member.totalCost.toFixed(2)}</div>
                                 </div>
-                              )}
+                                <div className="text-right">
+                                  <div className="text-xs text-gray-500">토큰</div>
+                                  <div className="font-bold text-green-600">{(member.totalTokens / 1000000).toFixed(1)}M</div>
+                                </div>
+                              </div>
                             </div>
                           </div>
+
+                          {/* 개별 리포트 (멤버가 펼쳐진 경우) */}
+                          {isMemberExpanded && (
+                            <div className="bg-white">
+                              {member.reports.map((report, idx) => (
+                                <div
+                                  key={report.id}
+                                  className={`p-3 pl-20 ${idx > 0 ? 'border-t border-gray-100' : ''} ${
+                                    selectedIds.includes(report.id) ? 'bg-blue-50' : ''
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-4">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedIds.includes(report.id)}
+                                      onChange={() => toggleSelection(report.id)}
+                                      className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
+                                    />
+                                    <div className="flex-1">
+                                      <div className="flex items-center justify-between">
+                                        <div>
+                                          <span className="font-medium text-gray-800">
+                                            {report.period}
+                                          </span>
+                                          <span className="ml-2 text-xs text-gray-500">
+                                            {new Date(report.createdAt).toLocaleString('ko-KR')}
+                                          </span>
+                                        </div>
+
+                                        {/* 개별 통계 */}
+                                        {report.summary && (
+                                          <div className="flex gap-3 text-sm">
+                                            <span className="text-blue-600 font-medium">
+                                              ${report.summary.totalCost?.toFixed(2)}
+                                            </span>
+                                            <span className="text-green-600 font-medium">
+                                              {((report.summary.totalTokens || 0) / 1000000).toFixed(1)}M
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>

@@ -24,6 +24,7 @@ export function getPool(): Pool {
 export async function saveReport(
   id: string,
   reporterName: string | null,
+  teamName: string | null,
   period: string,
   rawData: any,
   summary: any
@@ -42,11 +43,11 @@ export async function saveReport(
 
   // 2. 새 리포트 저장
   await pool.query(
-    `INSERT INTO reports (id, reporter_name, period, raw_data, summary, created_at)
-     VALUES ($1, $2, $3, $4, $5, NOW())
+    `INSERT INTO reports (id, reporter_name, team_name, period, raw_data, summary, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW())
      ON CONFLICT (id) DO UPDATE
-     SET reporter_name = $2, period = $3, raw_data = $4, summary = $5, created_at = NOW()`,
-    [id, reporterName, period, JSON.stringify(rawData), JSON.stringify(summary)]
+     SET reporter_name = $2, team_name = $3, period = $4, raw_data = $5, summary = $6, created_at = NOW()`,
+    [id, reporterName, teamName, period, JSON.stringify(rawData), JSON.stringify(summary)]
   )
 }
 
@@ -55,6 +56,7 @@ export async function getReports(page: number = 1, limit: number = 100): Promise
   reports: Array<{
     id: string
     reporterName: string | null
+    teamName: string | null
     period: string
     summary: any
     createdAt: Date
@@ -73,7 +75,7 @@ export async function getReports(page: number = 1, limit: number = 100): Promise
 
   // 페이징된 데이터 조회
   const result = await pool.query(
-    `SELECT id, reporter_name, period, summary, created_at
+    `SELECT id, reporter_name, team_name, period, summary, created_at
      FROM reports
      ORDER BY created_at DESC
      LIMIT $1 OFFSET $2`,
@@ -84,6 +86,7 @@ export async function getReports(page: number = 1, limit: number = 100): Promise
     reports: result.rows.map(row => ({
       id: row.id,
       reporterName: row.reporter_name,
+      teamName: row.team_name,
       period: row.period,
       summary: row.summary,
       createdAt: row.created_at,
@@ -129,6 +132,7 @@ export async function getReport(id: string): Promise<{
 export async function getReportsByIds(ids: string[]): Promise<Array<{
   id: string
   reporterName: string | null
+  teamName: string | null
   period: string
   rawData: any
   summary: any
@@ -137,7 +141,7 @@ export async function getReportsByIds(ids: string[]): Promise<Array<{
   const pool = getPool()
 
   const result = await pool.query(
-    `SELECT id, reporter_name, period, raw_data, summary, created_at
+    `SELECT id, reporter_name, team_name, period, raw_data, summary, created_at
      FROM reports
      WHERE id = ANY($1)
      ORDER BY created_at DESC`,
@@ -147,6 +151,7 @@ export async function getReportsByIds(ids: string[]): Promise<Array<{
   return result.rows.map(row => ({
     id: row.id,
     reporterName: row.reporter_name,
+    teamName: row.team_name,
     period: row.period,
     rawData: row.raw_data,
     summary: row.summary,

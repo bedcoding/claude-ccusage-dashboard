@@ -5,6 +5,7 @@ DROP TABLE IF EXISTS reports;
 CREATE TABLE reports (
     id VARCHAR(255) PRIMARY KEY,
     reporter_name VARCHAR(200),             -- 리포트 작성자 이름
+    team_name VARCHAR(200),                 -- 팀명
     period VARCHAR(200) NOT NULL,           -- 기간 (예: "2026-01-23 ~ 2026-01-30")
     raw_data JSONB NOT NULL,                -- 원본 데이터 (teamData, mergedData 등)
     summary JSONB,                          -- 요약 통계 (totalCost, totalTokens 등)

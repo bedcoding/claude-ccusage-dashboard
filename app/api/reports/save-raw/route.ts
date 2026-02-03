@@ -7,7 +7,7 @@ import type { CcusageData } from '@/app/types'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userName, ccusageData, since, until } = body
+    const { userName, teamName, ccusageData, since, until } = body
 
     if (!userName || !ccusageData) {
       return NextResponse.json(
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       }]
     }
 
-    await saveReport(reportId, userName, period, rawData, summary)
+    await saveReport(reportId, userName, teamName || null, period, rawData, summary)
 
     const reportsUrl = REPORTS_URL
 
