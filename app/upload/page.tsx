@@ -1,221 +1,145 @@
 'use client'
 
-import { useState, useMemo, Fragment, useEffect, useRef } from 'react'
-import type { TeamMemberData, TeamStats, CcusageData } from './types'
-import * as XLSX from 'xlsx'
+import { useState, useEffect, useRef } from 'react'
+import type { CcusageData } from './types'
 import { validateCcusageData } from '@/lib/validation'
 
-export default function Home() {
-  const [files, setFiles] = useState<File[]>([])
-  const [teamData, setTeamData] = useState<TeamMemberData[]>([])
-  const [stats, setStats] = useState<TeamStats | null>(null)
-  const [mergedData, setMergedData] = useState<CcusageData | null>(null)
-  const [message, setMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null)
-  const [copied, setCopied] = useState(false)
+type DatePreset = 'today' | 'yesterday' | 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth'
+
+interface ProcessResult {
+  totalDays: number
+  newDays: number
+  updatedDays: number
+  skippedDays: number
+  errorDays: number
+  period: string
+  batchId: number
+  dailyResults: Array<{
+    date: string
+    status: 'new' | 'updated' | 'skipped' | 'error'
+    cost: number
+    tokens: number
+    message?: string
+  }>
+}
+
+export default function UploadPage() {
   const [userName, setUserName] = useState('')
   const [teamName, setTeamName] = useState('')
-  const [directoryHandle, setDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null)
-  const [selectedFolder, setSelectedFolder] = useState('')
-  const [customSince, setCustomSince] = useState('')
-  const [customUntil, setCustomUntil] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const statsRef = useRef<HTMLDivElement>(null)
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [jsonInput, setJsonInput] = useState('')
+  const [copied, setCopied] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [message, setMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null)
+  const [result, setResult] = useState<ProcessResult | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // IndexedDB에서 폴더 핸들 저장/불러오기
-  const saveDirectoryHandle = async (handle: FileSystemDirectoryHandle) => {
-    try {
-      const db = await openDB()
-      const tx = db.transaction('handles', 'readwrite')
-      const store = tx.objectStore('handles')
-      store.put(handle, 'directoryHandle')
-    } catch (error) {
-      console.log('폴더 핸들 저장 실패:', error)
-    }
-  }
-
-  const loadDirectoryHandle = async () => {
-    try {
-      const db = await openDB()
-      const tx = db.transaction('handles', 'readonly')
-      const store = tx.objectStore('handles')
-      const request = store.get('directoryHandle')
-
-      request.onsuccess = async () => {
-        const handle = request.result as FileSystemDirectoryHandle
-        if (handle) {
-          // @ts-ignore - File System Access API
-          const permission = await handle.queryPermission({ mode: 'read' })
-          if (permission === 'granted') {
-            setDirectoryHandle(handle)
-            setSelectedFolder(handle.name)
-          }
-        }
-      }
-    } catch (error) {
-      console.log('폴더 핸들 복원 실패:', error)
-    }
-  }
-
-  const openDB = () => {
-    return new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('FileSystemDB', 1)
-      request.onerror = () => reject(request.error)
-      request.onsuccess = () => resolve(request.result)
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result
-        if (!db.objectStoreNames.contains('handles')) {
-          db.createObjectStore('handles')
-        }
-      }
-    })
-  }
-
-  // localStorage에서 사용자 이름/팀명 및 슬랙 설정 불러오기
+  // localStorage에서 사용자 이름/팀명 불러오기
   useEffect(() => {
     const savedName = localStorage.getItem('claudeUserName')
-    if (savedName) {
-      setUserName(savedName)
-    }
+    if (savedName) setUserName(savedName)
     const savedTeamName = localStorage.getItem('claudeTeamName')
-    if (savedTeamName) {
-      setTeamName(savedTeamName)
-    }
+    if (savedTeamName) setTeamName(savedTeamName)
 
-    // IndexedDB에서 폴더 핸들 불러오기
-    loadDirectoryHandle()
+    // 기본값: 지난 달
+    applyPreset('lastMonth')
   }, [])
 
-  // 사용자 이름 변경시 localStorage에 저장
   const handleUserNameChange = (name: string) => {
     setUserName(name)
     localStorage.setItem('claudeUserName', name)
   }
 
-  // 팀명 변경시 localStorage에 저장
   const handleTeamNameChange = (name: string) => {
     setTeamName(name)
     localStorage.setItem('claudeTeamName', name)
   }
 
-  // 폴더 선택
-  const selectFolder = async () => {
-    try {
-      // @ts-ignore - File System Access API
-      const handle = await window.showDirectoryPicker()
-      setDirectoryHandle(handle)
-      setSelectedFolder(handle.name)
-
-      // IndexedDB에 핸들 저장
-      await saveDirectoryHandle(handle)
-
-      setMessage({ text: `폴더 "${handle.name}" 선택 완료!`, type: 'success' })
-      setTimeout(() => setMessage(null), 3000)
-    } catch (error) {
-      if ((error as Error).name !== 'AbortError') {
-        setMessage({ text: '폴더 선택 실패. Chrome/Edge 브라우저를 사용해주세요.', type: 'error' })
-        setTimeout(() => setMessage(null), 3000)
-      }
-    }
-  }
-
-  // 선택된 폴더에서 파일 자동 불러오기
-  const loadFileFromFolder = async () => {
-    if (!directoryHandle) {
-      setMessage({ text: '먼저 폴더를 선택해주세요.', type: 'error' })
-      setTimeout(() => setMessage(null), 3000)
-      return
-    }
-
-    const targetName = userName || '이름'
-
-    // 권한 확인 및 요청 (사용자 제스처 컨텍스트에서 실행)
-    try {
-      // @ts-ignore - File System Access API
-      const permission = await directoryHandle.queryPermission({ mode: 'read' })
-      if (permission !== 'granted') {
-        // @ts-ignore - File System Access API
-        const requestPermission = await directoryHandle.requestPermission({ mode: 'read' })
-        if (requestPermission !== 'granted') {
-          setMessage({ text: '폴더 접근 권한이 필요합니다.', type: 'error' })
-          setTimeout(() => setMessage(null), 3000)
-          return
-        }
-      }
-    } catch (error) {
-      setMessage({ text: '권한 요청 실패. 폴더를 다시 선택해주세요.', type: 'error' })
-      setTimeout(() => setMessage(null), 3000)
-      return
-    }
-
-    setIsLoading(true)
-    setMessage({ text: '파일을 불러오는 중...', type: 'success' })
-
-    try {
-      const fileName = `${targetName}.json`
-      const fileHandle = await directoryHandle.getFileHandle(fileName)
-      const file = await fileHandle.getFile()
-
-      setFiles([file])
-      await processFiles([file])
-
-      setMessage({ text: `✅ "${fileName}" 파일을 성공적으로 불러왔습니다!`, type: 'success' })
-      setTimeout(() => setMessage(null), 3000)
-
-      // 결과로 부드럽게 스크롤
-      setTimeout(() => {
-        statsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 300)
-    } catch (error) {
-      setMessage({ text: `"${targetName}.json" 파일을 찾을 수 없습니다. 먼저 터미널에서 명령어를 실행해주세요.`, type: 'error' })
-      setTimeout(() => setMessage(null), 5000)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // 이번 주 월요일~일요일 계산
-  const weekDates = useMemo(() => {
+  // 날짜 프리셋 계산
+  const getPresetDates = (preset: DatePreset) => {
     const today = new Date()
-    const day = today.getDay()
-    const diff = day === 0 ? -6 : 1 - day // 월요일로 조정
+    const year = today.getFullYear()
+    const month = today.getMonth()
+    const date = today.getDate()
 
-    const monday = new Date(today)
-    monday.setDate(today.getDate() + diff)
+    const formatDate = (d: Date) => {
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      return `${y}-${m}-${day}`
+    }
 
-    const sunday = new Date(monday)
-    sunday.setDate(monday.getDate() + 6)
+    const formatDateForCommand = (d: Date) => {
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      return `${y}${m}${day}`
+    }
 
-    const formatDate = (date: Date) => {
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      return `${year}${month}${day}`
+    let start: Date, end: Date
+
+    switch (preset) {
+      case 'today':
+        start = end = new Date(year, month, date)
+        break
+      case 'yesterday':
+        start = end = new Date(year, month, date - 1)
+        break
+      case 'thisWeek': {
+        const dayOfWeek = today.getDay()
+        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+        start = new Date(year, month, date + mondayOffset)
+        end = new Date(start)
+        end.setDate(start.getDate() + 6)
+        break
+      }
+      case 'lastWeek': {
+        const dayOfWeek = today.getDay()
+        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+        start = new Date(year, month, date + mondayOffset - 7)
+        end = new Date(start)
+        end.setDate(start.getDate() + 6)
+        break
+      }
+      case 'thisMonth':
+        start = new Date(year, month, 1)
+        end = new Date(year, month + 1, 0)
+        break
+      case 'lastMonth':
+        start = new Date(year, month - 1, 1)
+        end = new Date(year, month, 0)
+        break
     }
 
     return {
-      since: formatDate(monday),
-      until: formatDate(sunday),
-      display: `${monday.getMonth() + 1}/${monday.getDate()} - ${sunday.getMonth() + 1}/${sunday.getDate()}`
+      start: formatDate(start),
+      end: formatDate(end),
+      startCmd: formatDateForCommand(start),
+      endCmd: formatDateForCommand(end)
     }
-  }, [])
-
-  // 날짜 형식 변환 함수 (YYYY-MM-DD → YYYYMMDD)
-  const formatDateForCommand = (dateStr: string) => {
-    return dateStr.replace(/-/g, '')
   }
 
-  // 날짜 형식 변환 함수 (YYYYMMDD → YYYY-MM-DD)
-  const formatDateForInput = (dateStr: string) => {
-    if (dateStr.length !== 8) return ''
-    return `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
+  const applyPreset = (preset: DatePreset) => {
+    const dates = getPresetDates(preset)
+    setStartDate(dates.start)
+    setEndDate(dates.end)
   }
 
-  // 명령어에 사용할 날짜 계산
-  const since = customSince ? formatDateForCommand(customSince) : weekDates.since
-  const until = customUntil ? formatDateForCommand(customUntil) : weekDates.until
+  // 날짜를 명령어 형식으로 변환
+  const getCommandDates = () => {
+    const parseDate = (dateStr: string) => {
+      // "2026-02-01" 형식을 "20260201" 형식으로 변환
+      return dateStr.replace(/-/g, '')
+    }
+    return {
+      since: parseDate(startDate),
+      until: parseDate(endDate)
+    }
+  }
 
-  const command = `npx ccusage daily --json --since ${since} --until ${until} > ${userName || '이름'}.json`
+  const { since, until } = getCommandDates()
+  const command = `npx ccusage daily --json --since ${since} --until ${until} | pbcopy && echo Copied`
 
   const copyCommand = async () => {
     try {
@@ -228,640 +152,720 @@ export default function Home() {
     }
   }
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.currentTarget.classList.add('drag-over')
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.currentTarget.classList.remove('drag-over')
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.currentTarget.classList.remove('drag-over')
-    const droppedFiles = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/json')
-    if (droppedFiles.length > 0) {
-      handleFileAdded(droppedFiles[0])
-    }
-  }
-
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = Array.from(e.target.files).find(f => f.type === 'application/json')
-      if (file) handleFileAdded(file)
-    }
-  }
-
-  const handleFileAdded = (newFile: File) => {
-    setFiles([newFile])
-    processFiles([newFile])
-    setTimeout(() => {
-      statsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 300)
-  }
-
-  const removeFile = () => {
-    setFiles([])
-    setTeamData([])
-    setStats(null)
-    setMergedData(null)
-  }
-
-  const processFiles = async (filesToProcess: File[]) => {
-    try {
-      const parsedData: TeamMemberData[] = []
-
-      for (const file of filesToProcess) {
-        const text = await file.text()
-
-        // JSON 파싱
-        let jsonData: unknown
-        try {
-          jsonData = JSON.parse(text)
-        } catch {
-          throw new Error(`${file.name}: 올바른 JSON 형식이 아닙니다.`)
-        }
-
-        // Zod 스키마로 데이터 검증
-        const validation = validateCcusageData(jsonData)
-        if (!validation.success) {
-          throw new Error(`${file.name}: ${validation.error}`)
-        }
-
-        const data: CcusageData = validation.data
-
-        // 파일명에서 확장자 제거하여 이름 추출
-        const name = file.name.replace('.json', '')
-
-        parsedData.push({
-          name,
-          fileName: file.name,
-          data
-        })
-      }
-
-      setTeamData(parsedData)
-      calculateStats(parsedData)
-      setMessage({ text: `${filesToProcess.length}개 파일 분석 완료!`, type: 'success' })
-      setTimeout(() => setMessage(null), 3000)
-    } catch (error) {
-      setMessage({ text: `파일 처리 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`, type: 'error' })
-      setTimeout(() => setMessage(null), 5000)
-    }
-  }
-
-  const calculateStats = (data: TeamMemberData[]) => {
-    const members = data.map(member => ({
-      name: member.name,
-      cost: member.data.totals.totalCost,
-      tokens: member.data.totals.totalTokens,
-      percentage: 0
-    }))
-
-    const totalCost = members.reduce((sum, m) => sum + m.cost, 0)
-    const totalTokens = members.reduce((sum, m) => sum + m.tokens, 0)
-
-    // 비율 계산
-    members.forEach(member => {
-      member.percentage = (member.cost / totalCost) * 100
-    })
-
-    // 일별 추이 데이터 수집
-    const periodMap = new Map<string, { totalCost: number; totalTokens: number }>()
-
-    data.forEach(member => {
-      member.data.daily.forEach(day => {
-        const existing = periodMap.get(day.date) || { totalCost: 0, totalTokens: 0 }
-        periodMap.set(day.date, {
-          totalCost: existing.totalCost + day.totalCost,
-          totalTokens: existing.totalTokens + day.totalTokens
-        })
-      })
-    })
-
-    const weeklyTrends = Array.from(periodMap.entries())
-      .map(([week, data]) => ({ week, ...data }))
-      .sort((a, b) => a.week.localeCompare(b.week))
-
-    const stats: TeamStats = {
-      totalMembers: data.length,
-      totalCost,
-      totalTokens,
-      avgCostPerMember: totalCost / data.length,
-      avgTokensPerMember: totalTokens / data.length,
-      members,
-      weeklyTrends
-    }
-
-    setStats(stats)
-
-    // 전체 데이터 병합
-    if (data.length > 0) {
-      mergeMemberData(data)
-    }
-  }
-
-  const mergeMemberData = (data: TeamMemberData[]) => {
-    // 일별 데이터를 날짜별로 병합
-    const dailyMap = new Map<string, any>()
-
-    data.forEach(member => {
-      member.data.daily.forEach(day => {
-        const existing = dailyMap.get(day.date)
-
-        if (!existing) {
-          // 새로운 날짜
-          dailyMap.set(day.date, {
-            date: day.date,
-            inputTokens: day.inputTokens,
-            outputTokens: day.outputTokens,
-            cacheCreationTokens: day.cacheCreationTokens,
-            cacheReadTokens: day.cacheReadTokens,
-            totalTokens: day.totalTokens,
-            totalCost: day.totalCost,
-            modelsUsed: new Set(day.modelsUsed),
-            modelBreakdowns: new Map<string, any>()
-          })
-
-          // 모델별 breakdown 추가
-          day.modelBreakdowns.forEach(model => {
-            dailyMap.get(day.date)!.modelBreakdowns.set(model.modelName, {
-              modelName: model.modelName,
-              inputTokens: model.inputTokens,
-              outputTokens: model.outputTokens,
-              cacheCreationTokens: model.cacheCreationTokens,
-              cacheReadTokens: model.cacheReadTokens,
-              cost: model.cost
-            })
-          })
-        } else {
-          // 기존 날짜에 데이터 합산
-          existing.inputTokens += day.inputTokens
-          existing.outputTokens += day.outputTokens
-          existing.cacheCreationTokens += day.cacheCreationTokens
-          existing.cacheReadTokens += day.cacheReadTokens
-          existing.totalTokens += day.totalTokens
-          existing.totalCost += day.totalCost
-          day.modelsUsed.forEach(model => existing.modelsUsed.add(model))
-
-          // 모델별 breakdown 병합
-          day.modelBreakdowns.forEach(model => {
-            const existingModel = existing.modelBreakdowns.get(model.modelName)
-            if (existingModel) {
-              existingModel.inputTokens += model.inputTokens
-              existingModel.outputTokens += model.outputTokens
-              existingModel.cacheCreationTokens += model.cacheCreationTokens
-              existingModel.cacheReadTokens += model.cacheReadTokens
-              existingModel.cost += model.cost
-            } else {
-              existing.modelBreakdowns.set(model.modelName, {
-                modelName: model.modelName,
-                inputTokens: model.inputTokens,
-                outputTokens: model.outputTokens,
-                cacheCreationTokens: model.cacheCreationTokens,
-                cacheReadTokens: model.cacheReadTokens,
-                cost: model.cost
-              })
-            }
-          })
-        }
-      })
-    })
-
-    // Map을 배열로 변환하고 정렬
-    const mergedDaily = Array.from(dailyMap.values())
-      .map(day => ({
-        ...day,
-        modelsUsed: Array.from(day.modelsUsed),
-        modelBreakdowns: Array.from(day.modelBreakdowns.values())
-      }))
-      .sort((a, b) => a.date.localeCompare(b.date))
-
-    // 전체 합계 계산
-    const totals = {
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheCreationTokens: 0,
-      cacheReadTokens: 0,
-      totalTokens: 0,
-      totalCost: 0
-    }
-
-    mergedDaily.forEach(day => {
-      totals.inputTokens += day.inputTokens
-      totals.outputTokens += day.outputTokens
-      totals.cacheCreationTokens += day.cacheCreationTokens
-      totals.cacheReadTokens += day.cacheReadTokens
-      totals.totalTokens += day.totalTokens
-      totals.totalCost += day.totalCost
-    })
-
-    const merged: CcusageData = {
-      daily: mergedDaily,
-      totals
-    }
-
-    setMergedData(merged)
-  }
-
-  const saveToDatabase = async () => {
-    if (!teamData.length) {
-      setMessage({ text: '저장할 데이터가 없습니다.', type: 'error' })
+  const handleUpload = async () => {
+    if (!userName.trim()) {
+      setMessage({ text: '이름을 입력해주세요.', type: 'error' })
       setTimeout(() => setMessage(null), 3000)
       return
     }
 
-    setIsSaving(true)
-    setMessage({ text: '데이터 저장 중...', type: 'success' })
+    if (!jsonInput.trim()) {
+      setMessage({ text: 'JSON 데이터를 붙여넣기 해주세요.', type: 'error' })
+      setTimeout(() => setMessage(null), 3000)
+      return
+    }
+
+    // JSON 파싱 및 검증
+    let jsonData: unknown
+    try {
+      jsonData = JSON.parse(jsonInput)
+    } catch {
+      setMessage({ text: '올바른 JSON 형식이 아닙니다.', type: 'error' })
+      setTimeout(() => setMessage(null), 3000)
+      return
+    }
+
+    const validation = validateCcusageData(jsonData)
+    if (!validation.success) {
+      setMessage({ text: `JSON 검증 실패: ${validation.error}`, type: 'error' })
+      setTimeout(() => setMessage(null), 5000)
+      return
+    }
+
+    const ccusageData: CcusageData = validation.data
+
+    setIsUploading(true)
+    setMessage({ text: '데이터 업로드 중...', type: 'success' })
 
     try {
       const response = await fetch('/api/reports/save', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          stats,
-          mergedData,
-          teamData,
-          customSince,
-          customUntil,
-          weekDates,
+          stats: {
+            totalMembers: 1,
+            totalCost: ccusageData.totals.totalCost,
+            totalTokens: ccusageData.totals.totalTokens,
+            avgCostPerMember: ccusageData.totals.totalCost,
+            avgTokensPerMember: ccusageData.totals.totalTokens,
+            members: [{
+              name: userName,
+              cost: ccusageData.totals.totalCost,
+              tokens: ccusageData.totals.totalTokens,
+              percentage: 100
+            }],
+            weeklyTrends: []
+          },
+          mergedData: ccusageData,
+          teamData: [{
+            name: userName,
+            fileName: `${userName}.json`,
+            data: ccusageData
+          }],
           userName,
-          teamName
+          teamName: teamName || ''
         })
       })
 
-      const result = await response.json()
+      const apiResult = await response.json()
 
-      if (result.ok) {
-        await navigator.clipboard.writeText(result.reportsUrl).catch(() => {})
-        setMessage({
-          text: `✅ 데이터 저장 확인: ${result.reportsUrl}`,
-          type: 'success'
-        })
+      if (apiResult.ok) {
+        // 결과 데이터 구성
+        const processResult: ProcessResult = {
+          totalDays: ccusageData.daily.length,
+          newDays: ccusageData.daily.length, // 일단 모두 신규로 표시
+          updatedDays: 0,
+          skippedDays: 0,
+          errorDays: 0,
+          period: `${ccusageData.daily[0]?.date || ''} ~ ${ccusageData.daily[ccusageData.daily.length - 1]?.date || ''}`,
+          batchId: apiResult.reportId || 0,
+          dailyResults: ccusageData.daily.map(day => ({
+            date: day.date,
+            status: 'new' as const,
+            cost: day.totalCost,
+            tokens: day.totalTokens
+          }))
+        }
+        setResult(processResult)
+        setMessage({ text: '업로드 성공!', type: 'success' })
       } else {
-        setMessage({ text: `저장 실패: ${result.error}`, type: 'error' })
+        setMessage({ text: `업로드 실패: ${apiResult.error}`, type: 'error' })
       }
     } catch (error) {
-      setMessage({ text: `저장 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`, type: 'error' })
+      setMessage({ text: `업로드 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`, type: 'error' })
     } finally {
-      setIsSaving(false)
+      setIsUploading(false)
       setTimeout(() => setMessage(null), 5000)
     }
   }
 
-  const exportToExcel = () => {
-    if (!teamData.length) return
-
-    // 전체 통합 데이터 시트
-    const mergedSheetData: any[] = []
-    if (mergedData) {
-      mergedData.daily.forEach(day => {
-        // 일별 총계 행
-        mergedSheetData.push({
-          'date': day.date,
-          'inputTokens': day.inputTokens,
-          'outputTokens': day.outputTokens,
-          'cacheCreationTokens': day.cacheCreationTokens,
-          'cacheReadTokens': day.cacheReadTokens,
-          'totalTokens': day.totalTokens,
-          'totalCost': day.totalCost.toFixed(2),
-          'modelsUsed': day.modelsUsed.join(', ')
-        })
-
-        // 모델별 breakdown
-        day.modelBreakdowns.forEach((model: any) => {
-          mergedSheetData.push({
-            'date': '',
-            'inputTokens': model.inputTokens,
-            'outputTokens': model.outputTokens,
-            'cacheCreationTokens': model.cacheCreationTokens,
-            'cacheReadTokens': model.cacheReadTokens,
-            'totalTokens': model.inputTokens + model.outputTokens + model.cacheCreationTokens + model.cacheReadTokens,
-            'totalCost': model.cost.toFixed(2),
-            'modelsUsed': `  └ ${model.modelName}`
-          })
-        })
-      })
-
-      // 전체 총계
-      mergedSheetData.push({
-        'date': '전체 총계',
-        'inputTokens': mergedData.totals.inputTokens,
-        'outputTokens': mergedData.totals.outputTokens,
-        'cacheCreationTokens': mergedData.totals.cacheCreationTokens,
-        'cacheReadTokens': mergedData.totals.cacheReadTokens,
-        'totalTokens': mergedData.totals.totalTokens,
-        'totalCost': mergedData.totals.totalCost.toFixed(2),
-        'modelsUsed': ''
-      })
-    }
-
-    // 상세 데이터 시트 (파일별)
-    const detailData: any[] = []
-
-    teamData.forEach(member => {
-      member.data.daily.forEach(day => {
-        // 일별 총계 행
-        detailData.push({
-          '파일명': member.name,
-          'date': day.date,
-          'inputTokens': day.inputTokens,
-          'outputTokens': day.outputTokens,
-          'cacheCreationTokens': day.cacheCreationTokens,
-          'cacheReadTokens': day.cacheReadTokens,
-          'totalTokens': day.totalTokens,
-          'totalCost': day.totalCost.toFixed(2),
-          'modelsUsed': day.modelsUsed.join(', ')
-        })
-
-        // 모델별 breakdown
-        day.modelBreakdowns.forEach(model => {
-          detailData.push({
-            '파일명': '',
-            'date': '',
-            'inputTokens': model.inputTokens,
-            'outputTokens': model.outputTokens,
-            'cacheCreationTokens': model.cacheCreationTokens,
-            'cacheReadTokens': model.cacheReadTokens,
-            'totalTokens': model.inputTokens + model.outputTokens + model.cacheCreationTokens + model.cacheReadTokens,
-            'totalCost': model.cost.toFixed(2),
-            'modelsUsed': `  └ ${model.modelName}`
-          })
-        })
-      })
-
-      // 파일별 총계
-      detailData.push({
-        '파일명': `${member.name} 총계`,
-        'date': '',
-        'inputTokens': member.data.totals.inputTokens,
-        'outputTokens': member.data.totals.outputTokens,
-        'cacheCreationTokens': member.data.totals.cacheCreationTokens,
-        'cacheReadTokens': member.data.totals.cacheReadTokens,
-        'totalTokens': member.data.totals.totalTokens,
-        'totalCost': member.data.totals.totalCost.toFixed(2),
-        'modelsUsed': ''
-      })
-      detailData.push({}) // 빈 행
-    })
-
-    // 요약 데이터 시트
-    const summaryData = stats?.members.map(member => ({
-      '파일명': member.name,
-      'totalCost': member.cost.toFixed(2),
-      'totalTokens': member.tokens,
-      'percentage': member.percentage.toFixed(1)
-    }))
-
-    // 엑셀 워크북 생성
-    const wb = XLSX.utils.book_new()
-
-    if (mergedData) {
-      const wsMerged = XLSX.utils.json_to_sheet(mergedSheetData)
-      XLSX.utils.book_append_sheet(wb, wsMerged, '전체 통합')
-    }
-
-    const wsDetail = XLSX.utils.json_to_sheet(detailData)
-    const wsSummary = XLSX.utils.json_to_sheet(summaryData || [])
-
-    XLSX.utils.book_append_sheet(wb, wsDetail, '파일별 상세')
-    XLSX.utils.book_append_sheet(wb, wsSummary, '요약')
-
-    // 파일 다운로드
-    const fileName = `Claude_Usage_${new Date().toISOString().split('T')[0]}.xlsx`
-    XLSX.writeFile(wb, fileName)
+  const handleReset = () => {
+    setJsonInput('')
+    setResult(null)
+    applyPreset('lastMonth')
   }
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'new':
+        return <span className="status-badge new">신규</span>
+      case 'updated':
+        return <span className="status-badge updated">갱신</span>
+      case 'skipped':
+        return <span className="status-badge skipped">스킵</span>
+      case 'error':
+        return <span className="status-badge error">오류</span>
+      default:
+        return null
+    }
+  }
+
+  const byteSize = new Blob([jsonInput]).size
+  const byteSizeStr = byteSize > 1024 * 1024
+    ? `${(byteSize / (1024 * 1024)).toFixed(1)} MB`
+    : byteSize > 1024
+    ? `${(byteSize / 1024).toFixed(1)} KB`
+    : `${byteSize} B`
+
   return (
-    <main>
+    <main className="upload-page">
       {message && (
-        <div className={`global-snackbar ${message.type}`}>
+        <div className={`snackbar ${message.type}`}>
           {message.text}
         </div>
       )}
 
       <div className="container">
-        <header className="header">
-          <h1>🚀 Claude Max 사용량 전송</h1>
-          <p>내 Claude Max 사용량을 수동으로 업로드하는 페이지입니다.</p>
-        </header>
+        {!result ? (
+          <div className="upload-form">
+            {/* Step 1: 명령어 생성 */}
+            <section className="section">
+              <h2>1. ccusage 명령어 생성</h2>
 
-        <div className="command-section">
-          <div className="command-header">
-            <h2>📋 이번 주 데이터 수집 명령어</h2>
-          </div>
-          <div className="input-row">
-            <div className="name-input-container">
-              <label htmlFor="teamName">🏢 팀명 입력</label>
-              <input
-                id="teamName"
-                type="text"
-                value={teamName}
-                onChange={(e) => handleTeamNameChange(e.target.value)}
-                placeholder="ㅇㅇ프론트팀"
-                className="name-input"
-              />
-            </div>
-            <div className="name-input-container">
-              <label htmlFor="userName">👤 이름 입력</label>
-              <input
-                id="userName"
-                type="text"
-                value={userName}
-                onChange={(e) => handleUserNameChange(e.target.value)}
-                placeholder="홍길동"
-                className="name-input"
-              />
-            </div>
-            <div className="date-input-container">
-              <label htmlFor="dateSince">📅 날짜 범위 (선택)</label>
-              <div className="date-inputs">
-                <input
-                  id="dateSince"
-                  type="date"
-                  value={customSince || formatDateForInput(weekDates.since)}
-                  onChange={(e) => setCustomSince(e.target.value)}
-                  className="date-input"
-                />
-                <span className="date-separator">~</span>
-                <input
-                  id="dateUntil"
-                  type="date"
-                  value={customUntil || formatDateForInput(weekDates.until)}
-                  onChange={(e) => setCustomUntil(e.target.value)}
-                  className="date-input"
-                />
+              <div className="preset-buttons">
+                <button onClick={() => applyPreset('today')}>오늘</button>
+                <button onClick={() => applyPreset('yesterday')}>어제</button>
+                <button onClick={() => applyPreset('thisWeek')}>이번 주</button>
+                <button onClick={() => applyPreset('lastWeek')}>지난 주</button>
+                <button onClick={() => applyPreset('thisMonth')}>이번 달</button>
+                <button onClick={() => applyPreset('lastMonth')}>지난 달</button>
               </div>
-            </div>
-          </div>
-          <div className="command-box" onClick={copyCommand}>
-            <code>{command}</code>
-            <button className="copy-button">
-              {copied ? '✓ 복사됨!' : '📋 복사'}
-            </button>
-          </div>
-          <div className="command-instructions">
-            <p>1️⃣ 이름 입력 후 위 명령어 클릭하여 복사</p>
-            <p>2️⃣ 터미널에 붙여넣기 후 실행</p>
-            <p>3️⃣ 생성된 JSON 파일을 아래에 업로드</p>
-          </div>
-        </div>
 
-        <div className="auto-load-section">
-          <div className="auto-load-header">
-            <h2>🚀 빠른 파일 불러오기</h2>
-            <p>폴더를 선택하면 자동으로 파일을 찾아옵니다</p>
-          </div>
-          <div className="auto-load-buttons">
-            <button className="folder-select-button" onClick={selectFolder}>
-              📂 폴더 선택
-              {selectedFolder && <span className="folder-name"> ({selectedFolder})</span>}
-            </button>
+              <div className="date-row">
+                <div className="date-field">
+                  <label>시작일</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </div>
+                <div className="date-field">
+                  <label>종료일</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="command-box">
+                <code>{command}</code>
+                <button className="copy-btn" onClick={copyCommand}>
+                  {copied ? '복사됨' : '복사'}
+                </button>
+              </div>
+              <p className="hint">터미널에서 위 명령어를 실행하면 결과가 클립보드에 자동 복사됩니다. 아래 텍스트 영역에 붙여넣기(Ctrl+V / Cmd+V)하세요.</p>
+            </section>
+
+            {/* Step 2: 업로드 대상 */}
+            <section className="section">
+              <div className="user-info">
+                업로드 대상: <strong>{userName || '(이름 입력 필요)'}</strong>
+                {teamName && <span className="team-tag">({teamName})</span>}
+              </div>
+              <div className="input-row">
+                <div className="input-field">
+                  <label>👤 이름 *</label>
+                  <input
+                    type="text"
+                    value={userName}
+                    onChange={(e) => handleUserNameChange(e.target.value)}
+                    placeholder="홍길동"
+                  />
+                </div>
+                <div className="input-field">
+                  <label>🏢 팀명</label>
+                  <input
+                    type="text"
+                    value={teamName}
+                    onChange={(e) => handleTeamNameChange(e.target.value)}
+                    placeholder="프론트엔드팀"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Step 3: JSON 붙여넣기 */}
+            <section className="section">
+              <div className="json-header">
+                <h2>2. ccusage JSON 데이터 붙여넣기 *</h2>
+                <span className="byte-count">{byteSizeStr} / 2 MB</span>
+              </div>
+              <textarea
+                ref={textareaRef}
+                className="json-input"
+                value={jsonInput}
+                onChange={(e) => setJsonInput(e.target.value)}
+                placeholder={`{"daily": [{"date": "2026-02-02", "totalCost": 1.23, "totalTokens": 50000, ...}]}`}
+              />
+            </section>
+
+            {/* 버튼 */}
             <button
-              className="auto-load-button"
-              onClick={loadFileFromFolder}
-              disabled={!directoryHandle || isLoading}
+              className="upload-btn"
+              onClick={handleUpload}
+              disabled={isUploading || !userName.trim() || !jsonInput.trim()}
             >
-              {isLoading ? '⏳ 불러오는 중...' : `⚡ ${userName || '이름'}.json 자동 불러오기`}
+              {isUploading ? '업로드 중...' : '업로드'}
             </button>
           </div>
-        </div>
+        ) : (
+          <div className="result-section">
+            <div className="result-header">
+              <h2>업로드 결과</h2>
+              <button className="new-upload-btn" onClick={handleReset}>
+                새로 업로드
+              </button>
+            </div>
 
-        <div className="upload-section">
-          <div
-            className="upload-zone"
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => document.getElementById('fileInput')?.click()}
-          >
-            <div className="upload-icon">📁</div>
-            <div className="upload-text">JSON 파일을 드래그하거나 클릭하여 업로드</div>
-            <div className="upload-hint">ccusage로 추출한 JSON 파일을 업로드하세요</div>
-            <input
-              id="fileInput"
-              type="file"
-              accept=".json"
-              onChange={handleFileInput}
-              style={{ display: 'none' }}
-            />
+            {/* 처리 요약 */}
+            <div className="summary-grid">
+              <div className="summary-item">
+                <div className="summary-value">{result.totalDays}</div>
+                <div className="summary-label">전체</div>
+              </div>
+              <div className="summary-item new">
+                <div className="summary-value">{result.newDays}</div>
+                <div className="summary-label">신규 추가</div>
+              </div>
+              <div className="summary-item updated">
+                <div className="summary-value">{result.updatedDays}</div>
+                <div className="summary-label">갱신</div>
+              </div>
+              <div className="summary-item skipped">
+                <div className="summary-value">{result.skippedDays}</div>
+                <div className="summary-label">스킵</div>
+              </div>
+              <div className="summary-item error">
+                <div className="summary-value">{result.errorDays}</div>
+                <div className="summary-label">오류</div>
+              </div>
+            </div>
+
+            <div className="result-info">
+              <p>대상: {userName}</p>
+              <p>기간: {result.period}</p>
+              <p>배치 ID: {result.batchId}</p>
+            </div>
+
+            {/* 처리된 데이터 테이블 */}
+            <div className="result-table-section">
+              <h3>처리된 데이터</h3>
+              <table className="result-table">
+                <thead>
+                  <tr>
+                    <th>날짜</th>
+                    <th>상태</th>
+                    <th>비용 (USD)</th>
+                    <th>토큰</th>
+                    <th>변경 내역</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.dailyResults.map((day, idx) => (
+                    <tr key={idx}>
+                      <td>{day.date}</td>
+                      <td>{getStatusBadge(day.status)}</td>
+                      <td>${day.cost.toFixed(2)}</td>
+                      <td>{day.tokens.toLocaleString()}</td>
+                      <td>{day.message || ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-
-          {files.length > 0 && (
-            <div className="file-list">
-              {files.map((file, index) => (
-                <div key={index} className="file-item">
-                  <span className="file-name">📄 {file.name}</span>
-                  <button className="file-remove" onClick={(e) => {
-                    e.stopPropagation()
-                    removeFile()
-                  }}>×</button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {stats && (
-          <>
-            <div className="stats-grid" ref={statsRef}>
-              <div className="stat-card">
-                <div className="stat-label">총 비용</div>
-                <div className="stat-value">${stats.totalCost.toFixed(2)}</div>
-                <div className="stat-subtext">USD</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-label">총 토큰</div>
-                <div className="stat-value">{(stats.totalTokens / 1000000).toFixed(1)}M</div>
-                <div className="stat-subtext">tokens</div>
-              </div>
-            </div>
-
-            {mergedData && (
-              <div className="table-card">
-                <div className="table-header">
-                  <div className="chart-title">전체 사용 내역 (통합)</div>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button className="excel-button" onClick={exportToExcel}>
-                      📊 엑셀 다운로드
-                    </button>
-                    <button
-                      className="excel-button"
-                      onClick={saveToDatabase}
-                      disabled={isSaving}
-                      style={{
-                        background: isSaving ? '#94a3b8' : '#10b981',
-                        cursor: isSaving ? 'not-allowed' : 'pointer'
-                      }}
-                    >
-                      {isSaving ? '⏳ 저장 중...' : '💾 데이터 DB 전송'}
-                    </button>
-                  </div>
-                </div>
-                <div className="table-scroll">
-                  <table className="detail-table">
-                    <thead>
-                      <tr>
-                        <th>date</th>
-                        <th>inputTokens</th>
-                        <th>outputTokens</th>
-                        <th>cacheCreationTokens</th>
-                        <th>cacheReadTokens</th>
-                        <th>totalTokens</th>
-                        <th>totalCost</th>
-                        <th>modelsUsed</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mergedData.daily.map((day, dayIdx) => (
-                        <Fragment key={dayIdx}>
-                          <tr className="week-row">
-                            <td>{day.date}</td>
-                            <td>{day.inputTokens.toLocaleString()}</td>
-                            <td>{day.outputTokens.toLocaleString()}</td>
-                            <td>{day.cacheCreationTokens.toLocaleString()}</td>
-                            <td>{day.cacheReadTokens.toLocaleString()}</td>
-                            <td>{day.totalTokens.toLocaleString()}</td>
-                            <td><strong>${day.totalCost.toFixed(2)}</strong></td>
-                            <td>{day.modelsUsed.join(', ')}</td>
-                          </tr>
-                          {day.modelBreakdowns.map((model: any, modelIdx: number) => (
-                            <tr key={`${dayIdx}-${modelIdx}`} className="model-row">
-                              <td></td>
-                              <td>{model.inputTokens.toLocaleString()}</td>
-                              <td>{model.outputTokens.toLocaleString()}</td>
-                              <td>{model.cacheCreationTokens.toLocaleString()}</td>
-                              <td>{model.cacheReadTokens.toLocaleString()}</td>
-                              <td>{(model.inputTokens + model.outputTokens + model.cacheCreationTokens + model.cacheReadTokens).toLocaleString()}</td>
-                              <td>${model.cost.toFixed(2)}</td>
-                              <td className="model-name">└ {model.modelName}</td>
-                            </tr>
-                          ))}
-                        </Fragment>
-                      ))}
-                      <tr className="total-row">
-                        <td><strong>전체 총계</strong></td>
-                        <td>{mergedData.totals.inputTokens.toLocaleString()}</td>
-                        <td>{mergedData.totals.outputTokens.toLocaleString()}</td>
-                        <td>{mergedData.totals.cacheCreationTokens.toLocaleString()}</td>
-                        <td>{mergedData.totals.cacheReadTokens.toLocaleString()}</td>
-                        <td>{mergedData.totals.totalTokens.toLocaleString()}</td>
-                        <td><strong>${mergedData.totals.totalCost.toFixed(2)}</strong></td>
-                        <td></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-
-          </>
         )}
       </div>
+
+      <style jsx>{`
+        .upload-page {
+          min-height: 100vh;
+          background: #f5f5f5;
+          padding: 2rem 1rem;
+        }
+
+        .container {
+          max-width: 960px;
+          margin: 0 auto;
+        }
+
+        .snackbar {
+          position: fixed;
+          top: 1rem;
+          left: 50%;
+          transform: translateX(-50%);
+          padding: 0.75rem 1.5rem;
+          border-radius: 8px;
+          font-weight: 500;
+          z-index: 1000;
+          animation: slideDown 0.3s ease;
+        }
+
+        .snackbar.success {
+          background: #dcfce7;
+          color: #166534;
+        }
+
+        .snackbar.error {
+          background: #fee2e2;
+          color: #991b1b;
+        }
+
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+          to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        .upload-form {
+          background: white;
+          border-radius: 12px;
+          padding: 2rem;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .section {
+          margin-bottom: 2rem;
+          padding-bottom: 1.5rem;
+          border-bottom: 1px solid #e5e7eb;
+        }
+
+        .section:last-of-type {
+          border-bottom: none;
+          margin-bottom: 1rem;
+        }
+
+        .section h2 {
+          font-size: 1rem;
+          color: #374151;
+          margin: 0 0 1rem 0;
+        }
+
+        .preset-buttons {
+          display: flex;
+          gap: 0.5rem;
+          flex-wrap: wrap;
+          margin-bottom: 1rem;
+        }
+
+        .preset-buttons button {
+          padding: 0.5rem 1rem;
+          border: 1px solid #e5e7eb;
+          background: white;
+          border-radius: 6px;
+          font-size: 0.875rem;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .preset-buttons button:hover {
+          background: #f3f4f6;
+          border-color: #d1d5db;
+        }
+
+        .date-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1rem;
+          margin-bottom: 1rem;
+        }
+
+        .date-field label,
+        .input-field label {
+          display: block;
+          font-size: 0.75rem;
+          color: #6b7280;
+          margin-bottom: 0.25rem;
+        }
+
+        .date-field input,
+        .input-field input {
+          width: 100%;
+          padding: 0.75rem;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          font-size: 0.875rem;
+          box-sizing: border-box;
+        }
+
+        .date-field input:focus,
+        .input-field input:focus {
+          outline: none;
+          border-color: #3b82f6;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .command-box {
+          display: flex;
+          align-items: center;
+          background: #1e293b;
+          border-radius: 8px;
+          padding: 1rem;
+          gap: 1rem;
+        }
+
+        .command-box code {
+          flex: 1;
+          color: #4ade80;
+          font-family: 'Monaco', 'Menlo', monospace;
+          font-size: 0.8rem;
+          word-break: break-all;
+        }
+
+        .copy-btn {
+          padding: 0.5rem 1rem;
+          background: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          font-size: 0.875rem;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+
+        .copy-btn:hover {
+          background: #2563eb;
+        }
+
+        .hint {
+          font-size: 0.75rem;
+          color: #6b7280;
+          margin-top: 0.5rem;
+          text-align: center;
+        }
+
+        .user-info {
+          padding: 0.75rem 1rem;
+          background: #f8fafc;
+          border-radius: 8px;
+          margin-bottom: 1rem;
+          font-size: 0.875rem;
+          color: #374151;
+        }
+
+        .team-tag {
+          color: #6b7280;
+          margin-left: 0.5rem;
+        }
+
+        .input-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1rem;
+        }
+
+        .json-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 0.5rem;
+        }
+
+        .json-header h2 {
+          margin: 0;
+        }
+
+        .byte-count {
+          font-size: 0.75rem;
+          color: #6b7280;
+        }
+
+        .json-input {
+          width: 100%;
+          height: 200px;
+          padding: 1rem;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          font-family: 'Monaco', 'Menlo', monospace;
+          font-size: 0.8rem;
+          resize: vertical;
+          box-sizing: border-box;
+        }
+
+        .json-input:focus {
+          outline: none;
+          border-color: #3b82f6;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .json-input::placeholder {
+          color: #9ca3af;
+        }
+
+        .upload-btn {
+          width: 100%;
+          padding: 1rem;
+          background: linear-gradient(135deg, #3b82f6, #2563eb);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 1rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .upload-btn:hover:not(:disabled) {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+
+        .upload-btn:disabled {
+          background: #9ca3af;
+          cursor: not-allowed;
+        }
+
+        /* 결과 섹션 */
+        .result-section {
+          background: white;
+          border-radius: 12px;
+          padding: 2rem;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .result-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 1.5rem;
+        }
+
+        .result-header h2 {
+          margin: 0;
+          font-size: 1.25rem;
+          color: #1f2937;
+        }
+
+        .new-upload-btn {
+          padding: 0.5rem 1rem;
+          background: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          font-size: 0.875rem;
+          cursor: pointer;
+        }
+
+        .summary-grid {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 1rem;
+          margin-bottom: 1.5rem;
+        }
+
+        .summary-item {
+          text-align: center;
+          padding: 1rem;
+          background: #f8fafc;
+          border-radius: 8px;
+        }
+
+        .summary-item.new {
+          background: #dcfce7;
+        }
+
+        .summary-item.updated {
+          background: #fef3c7;
+        }
+
+        .summary-item.skipped {
+          background: #f3f4f6;
+        }
+
+        .summary-item.error {
+          background: #fee2e2;
+        }
+
+        .summary-value {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #1f2937;
+        }
+
+        .summary-item.new .summary-value {
+          color: #166534;
+        }
+
+        .summary-item.updated .summary-value {
+          color: #92400e;
+        }
+
+        .summary-item.error .summary-value {
+          color: #991b1b;
+        }
+
+        .summary-label {
+          font-size: 0.75rem;
+          color: #6b7280;
+          margin-top: 0.25rem;
+        }
+
+        .result-info {
+          padding: 1rem;
+          background: #f8fafc;
+          border-radius: 8px;
+          margin-bottom: 1.5rem;
+          font-size: 0.875rem;
+          color: #374151;
+        }
+
+        .result-info p {
+          margin: 0.25rem 0;
+        }
+
+        .result-table-section h3 {
+          font-size: 1rem;
+          color: #374151;
+          margin: 0 0 1rem 0;
+        }
+
+        .result-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 0.875rem;
+        }
+
+        .result-table th,
+        .result-table td {
+          padding: 0.75rem;
+          text-align: left;
+          border-bottom: 1px solid #e5e7eb;
+        }
+
+        .result-table th {
+          background: #f8fafc;
+          font-weight: 500;
+          color: #6b7280;
+        }
+
+        .result-table tbody tr:hover {
+          background: #f9fafb;
+        }
+
+        .status-badge {
+          display: inline-block;
+          padding: 0.25rem 0.5rem;
+          border-radius: 4px;
+          font-size: 0.75rem;
+          font-weight: 500;
+        }
+
+        .status-badge.new {
+          background: #dcfce7;
+          color: #166534;
+        }
+
+        .status-badge.updated {
+          background: #fef3c7;
+          color: #92400e;
+        }
+
+        .status-badge.skipped {
+          background: #f3f4f6;
+          color: #6b7280;
+        }
+
+        .status-badge.error {
+          background: #fee2e2;
+          color: #991b1b;
+        }
+
+        @media (max-width: 768px) {
+          .date-row,
+          .input-row {
+            grid-template-columns: 1fr;
+          }
+
+          .summary-grid {
+            grid-template-columns: repeat(3, 1fr);
+          }
+
+          .preset-buttons {
+            justify-content: flex-start;
+          }
+
+          .command-box {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .command-box code {
+            margin-bottom: 0.5rem;
+          }
+        }
+      `}</style>
     </main>
   )
 }
