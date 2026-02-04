@@ -205,31 +205,35 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="dashboard-container">
-      {/* 헤더 */}
-      <div className="dashboard-header">
-        <h1>대시보드</h1>
+    <div className="page-wrapper">
+      <div className="dashboard-container">
+        {/* 헤더 */}
+        <header className="header">
+        <h1>📈 대시보드</h1>
+        <p>월별 팀/팀원 사용량을 확인합니다</p>
+      </header>
+
+      {/* 탭 + 월선택기 */}
+      <div className="tabs-row">
+        <div className="tabs">
+          <button
+            className={`tab ${activeTab === 'team' ? 'active' : ''}`}
+            onClick={() => setActiveTab('team')}
+          >
+            팀별
+          </button>
+          <button
+            className={`tab ${activeTab === 'member' ? 'active' : ''}`}
+            onClick={() => setActiveTab('member')}
+          >
+            팀원별
+          </button>
+        </div>
         <div className="month-selector">
           <button onClick={handlePrevMonth} className="month-nav-btn">&lt;</button>
           <span className="current-month">{selectedYear}년 {selectedMonth}월</span>
           <button onClick={handleNextMonth} className="month-nav-btn">&gt;</button>
         </div>
-      </div>
-
-      {/* 탭 */}
-      <div className="tabs">
-        <button
-          className={`tab ${activeTab === 'team' ? 'active' : ''}`}
-          onClick={() => setActiveTab('team')}
-        >
-          팀별
-        </button>
-        <button
-          className={`tab ${activeTab === 'member' ? 'active' : ''}`}
-          onClick={() => setActiveTab('member')}
-        >
-          팀원별
-        </button>
       </div>
 
       {/* 팀 선택 */}
@@ -789,24 +793,25 @@ export default function DashboardPage() {
         </div>
       )}
 
+      </div>
+
       <style jsx>{`
+        .page-wrapper {
+          min-height: 100vh;
+          background: #f9fafb;
+          padding: 2rem 0;
+        }
+
         .dashboard-container {
           max-width: 1200px;
           margin: 0 auto;
-          padding: 2rem;
         }
 
-        .dashboard-header {
+        .tabs-row {
           display: flex;
           justify-content: space-between;
           align-items: center;
           margin-bottom: 1.5rem;
-        }
-
-        .dashboard-header h1 {
-          font-size: 1.5rem;
-          font-weight: 600;
-          color: #1f2937;
         }
 
         .month-selector {
@@ -844,9 +849,6 @@ export default function DashboardPage() {
         .tabs {
           display: flex;
           gap: 0.5rem;
-          margin-bottom: 1.5rem;
-          border-bottom: 1px solid #e5e7eb;
-          padding-bottom: 0.5rem;
         }
 
         .tab {
@@ -1172,7 +1174,7 @@ export default function DashboardPage() {
             padding: 1rem;
           }
 
-          .dashboard-header {
+          .tabs-row {
             flex-direction: column;
             gap: 1rem;
             align-items: flex-start;

@@ -131,10 +131,10 @@ fi
 
   return (
     <main>
-      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '960px', margin: '0 auto' }}>
         <header className="header">
           <h1>⚡ 자동화 가이드</h1>
-          <p>매주 월요일마다 자동으로 ccusage 데이터를 수집하고 DB에 저장하는 방법을 가이드합니다.</p>
+          <p>Claude 사용량 데이터를 맥북 CronTab을 써서 자동으로 DB에 저장하는 방법을 가이드합니다.</p>
         </header>
 
         {/* 설정 섹션 */}

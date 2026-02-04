@@ -26,6 +26,17 @@ export default function Home() {
           </button>
 
           <button
+            onClick={() => router.push('/guide')}
+            className="landing-button guide-button"
+          >
+            <div className="button-icon">⚡</div>
+            <div className="button-title">자동화 가이드</div>
+            <div className="button-description">
+              Claude 사용량 데이터를 맥북 CronTab을 써서 자동으로 DB에 저장하는 방법을 가이드합니다.
+            </div>
+          </button>
+
+          <button
             onClick={() => router.push('/dashboard')}
             className="landing-button dashboard-button"
           >
@@ -43,18 +54,7 @@ export default function Home() {
             <div className="button-icon">📊</div>
             <div className="button-title">엑셀 다운로드</div>
             <div className="button-description">
-              저장된 리포트를 조회하고 확인합니다.
-            </div>
-          </button>
-
-          <button
-            onClick={() => router.push('/guide')}
-            className="landing-button guide-button"
-          >
-            <div className="button-icon">⚡</div>
-            <div className="button-title">자동화 가이드</div>
-            <div className="button-description">
-              Claude 사용량 데이터를 맥북 CronTab을 써서 자동으로 DB에 저장하는 방법을 가이드합니다.
+              저장된 데이터를 엑셀 파일로 다운로드합니다.
             </div>
           </button>
         </div>

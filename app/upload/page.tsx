@@ -286,6 +286,10 @@ export default function UploadPage() {
       )}
 
       <div className="container">
+        <header className="header">
+          <h1>💾 사용량 전송</h1>
+          <p>Claude 사용량 데이터를 DB에 저장합니다</p>
+        </header>
         {!result ? (
           <div className="upload-form">
             {/* Step 1: 명령어 생성 */}

@@ -13,9 +13,9 @@ export default function Navigation() {
 
   const navItems = [
     { label: '사용량 전송', href: '/upload', icon: '💾', color: '#3b82f6' },
+    { label: '자동화 가이드', href: '/guide', icon: '⚡', color: '#f59e0b' },
     { label: '대시보드', href: '/dashboard', icon: '📈', color: '#ec4899' },
     { label: '엑셀 다운로드', href: '/reports', icon: '📊', color: '#10b981' },
-    { label: '자동화 가이드', href: '/guide', icon: '⚡', color: '#f59e0b' },
   ]
 
   return (

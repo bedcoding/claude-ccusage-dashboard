@@ -259,8 +259,8 @@ export default function ReportsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4">
-        <div className="max-w-6xl mx-auto">
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-[1200px] mx-auto">
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
@@ -299,14 +299,14 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-[1200px] mx-auto">
         {/* 헤더 */}
         <header className="header">
           <div className="flex items-center justify-between">
             <div>
-              <h1>📊 Claude Max 팀 사용량 리포트</h1>
-              <p>원하는 리포트를 선택하여 엑셀 파일로 다운로드할 수 있습니다.</p>
+              <h1>📊 엑셀 다운로드</h1>
+              <p>저장된 사용량 데이터를 엑셀 파일로 다운로드합니다</p>
               {totalPages > 1 && (
                 <p className="text-sm text-gray-500 mt-1">
                   전체 {total}개 중 {reports.length}개 표시 (페이지 {currentPage}/{totalPages})
